@@ -2,3 +2,5 @@
 
 
 ### v5--> https://marketalgo-goldv5.streamlit.app/
+
+### v6--> 
