@@ -97,18 +97,8 @@ with tab4:
             st.session_state['selected_timeframe_key'] = "4h"
             st.session_state['selected_timeframe_name'] = "4-Hour"
         
-        # Chart type selection
-        st.markdown("**Chart Type:**")
-        chart_types = [
-            "Standard Candlestick",
-            "Candlestick with Volume",
-            "Hollow Candlestick",
-            "Heiken Ashi",
-            "Line Chart"
-        ]
-        
-        selected_chart_type = st.selectbox("Select Chart Type", chart_types, label_visibility="collapsed")
-
+        # Chart type selection (FORCED to standard candlestick)
+        selected_chart_type = "Standard Candlestick"
         # Technical indicators
         st.markdown("**Indicators:**")
         show_ma = st.checkbox("Moving Averages", value=True)
@@ -155,38 +145,13 @@ with tab4:
         st.subheader(f"{selected_chart_type} - {st.session_state['selected_timeframe_name']}")
         
         # Description appears below chart once generated
-        chart_descriptions = {
-            "Standard Candlestick": """
-            Candlestick charts display the high, low, open, and close prices for each period.
-            - **Green candles**: Close price higher than open price (bullish)
-            - **Red candles**: Close price lower than open price (bearish)
-            """,
-            
-            "Candlestick with Volume": """
-            Combines standard candlesticks with volume bars to show trading activity.
-            Volume can confirm price movements or indicate potential reversals.
-            """,
-            
-            "Hollow Candlestick": """
-            Similar to standard candlesticks but with hollow bodies for bullish candles.
-            This makes it easier to distinguish between bullish and bearish periods.
-            """,
-            
-            "Heiken Ashi": """
-            Heiken Ashi ('Average Bar' in Japanese) uses modified price values that
-            smooth price action to help identify trends more clearly.
-            """,
-            
-            "Line Chart": """
-            Simple line chart showing closing prices over time.
-            Useful for viewing the overall trend without the noise of individual candles.
-            """
-        }
+        chart_description = """
+        Candlestick charts display the high, low, open, and close prices for each period.\n- **Green candles**: Close price higher than open price (bullish)\n- **Red candles**: Close price lower than open price (bearish)\nThis chart is styled for a TradingView-like appearance."""
     
     # Generate and display the chart - always show in col1
     if generate_button or 'candle_chart' in st.session_state:
         with col1:
-            with st.spinner(f"Generating {selected_chart_type} for {st.session_state['selected_timeframe_name']} data..."):
+            with st.spinner(f"Generating Candlestick Chart for {st.session_state['selected_timeframe_name']} data..."):
                 # Load data file
                 try:
                     data_file = config.TIMEFRAME_FILES[timeframe_key]
@@ -215,153 +180,48 @@ with tab4:
                     if col in data.columns and data[col].dtype == object:
                         data[col] = data[col].astype(str).str.replace(',', '').astype(float)
             
-                # Calculate additional data for different chart types
-                if selected_chart_type == "Heiken Ashi":
-                    # Calculate Heiken Ashi values
-                    ha_data = data.copy()
-                    ha_data['HA_Close'] = (data['Open'] + data['High'] + data['Low'] + data['Close']) / 4
-                    
-                    # Initialize HA Open with the first candle's open price
-                    ha_open = [data['Open'].iloc[0]]
-                    
-                    # Calculate HA Open for the rest of the candles
-                    for i in range(1, len(data)):
-                        ha_open.append((ha_open[-1] + ha_data['HA_Close'].iloc[i-1]) / 2)
-                    
-                    ha_data['HA_Open'] = ha_open
-                    ha_data['HA_High'] = ha_data[['High', 'HA_Open', 'HA_Close']].max(axis=1)
-                    ha_data['HA_Low'] = ha_data[['Low', 'HA_Open', 'HA_Close']].min(axis=1)
-                    
-                    # Replace standard OHLC with Heiken Ashi values
-                    data['Open'] = ha_data['HA_Open']
-                    data['High'] = ha_data['HA_High']
-                    data['Low'] = ha_data['HA_Low']
-                    data['Close'] = ha_data['HA_Close']
+                # Candlestick chart only
+                increasing_color = '#26a69a'  # Green
+                decreasing_color = '#ef5350'  # Red
+                line_increasing = '#26a69a'
+                line_decreasing = '#ef5350'
             
-                # Create plot based on chart type
-                fig = go.Figure()
-                
-                # Add candlestick trace
-                if selected_chart_type == "Hollow Candlestick":
-                    # Create color arrays for hollow candles
-                    increasing_color = 'rgba(38, 166, 154, 0.2)'  # Semi-transparent green fill
-                    decreasing_color = 'rgba(239, 83, 80, 1)'     # Solid red
-                    line_increasing = 'rgba(38, 166, 154, 1)'     # Green border
-                    line_decreasing = 'rgba(239, 83, 80, 1)'      # Red border
-                else:  # Standard colors for other types
-                    increasing_color = '#26a69a'  # Green
-                    decreasing_color = '#ef5350'  # Red
-                    line_increasing = '#26a69a'
-                    line_decreasing = '#ef5350'
-            
-                # Add the appropriate chart type
-                if selected_chart_type == "Line Chart":
-                    # Use line chart instead of candlesticks
-                    fig.add_trace(
-                        go.Scatter(
-                            x=data["Date"],
-                            y=data["Close"],
-                            mode="lines",
-                            line=dict(width=2, color="#2962FF"),
-                            name="Price"
-                        )
-                    )
+                # Adjust candle width based on timeframe for better visibility
+                if len(data) > 1:
+                    time_delta = (data['Date'].iloc[1] - data['Date'].iloc[0]).total_seconds()
+                    if time_delta >= 86400 * 30:  # Monthly
+                        candle_width = 20
+                    elif time_delta >= 86400 * 7:  # Weekly
+                        candle_width = 12  
+                    elif time_delta >= 86400:  # Daily
+                        candle_width = 8
+                    elif time_delta >= 3600:  # Hourly
+                        candle_width = 4
+                    else:  # Any other timeframe
+                        candle_width = 6
                 else:
-                    # Adjust candle width based on timeframe for better visibility
-                    # Get time delta between consecutive candles to set appropriate width
-                    if len(data) > 1:
-                        time_delta = (data['Date'].iloc[1] - data['Date'].iloc[0]).total_seconds()
-                        
-                        # Set candle width based on timeframe
-                        if time_delta >= 86400 * 30:  # Monthly
-                            candle_width = 20
-                        elif time_delta >= 86400 * 7:  # Weekly
-                            candle_width = 12  
-                        elif time_delta >= 86400:  # Daily
-                            candle_width = 8
-                        elif time_delta >= 3600:  # Hourly
-                            candle_width = 4
-                        else:  # Any other timeframe
-                            candle_width = 6
-                    else:
-                        candle_width = 8  # Default width
-                        
-                    # Regular candlestick chart with proper candle sizing
-                    fig.add_trace(
-                        go.Candlestick(
-                            x=data["Date"],
-                            open=data["Open"],
-                            high=data["High"],
-                            low=data["Low"],
-                            close=data["Close"],
-                            increasing_line_color=line_increasing,
-                            decreasing_line_color=line_decreasing,
-                            increasing_fillcolor=increasing_color,
-                            decreasing_fillcolor=decreasing_color,
-                            name="Price",
-                            whiskerwidth=0.5,  # Thicker whiskers for high/low
-                            line=dict(width=2),  # Thicker candle outlines
-                            xperiodalignment="middle",  # Center candles on time period
-                            xperiod=time_delta if len(data) > 1 else 86400,  # Period matching time delta
-                            xperiod0=data['Date'].iloc[0] if len(data) > 0 else None
-                        )
-                    )
-            
-                # Add volume if selected
-                if selected_chart_type == "Candlestick with Volume" and "Volume" in data.columns:
-                    # Create volume colors based on price direction
-                    colors = [increasing_color if data['Close'].iloc[i] >= data['Open'].iloc[i] 
-                              else decreasing_color for i in range(len(data))]
-                    
-                    # Create a new row for volume subplot
-                    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                                       vertical_spacing=0.02, 
-                                       row_heights=[0.8, 0.2])
+                    candle_width = 8  # Default width
                 
-                    # Re-add price chart to first subplot
-                    if selected_chart_type == "Line Chart":
-                        # Use line chart instead of candlesticks
-                        fig.add_trace(
-                            go.Scatter(
-                                x=data["Date"],
-                                y=data["Close"],
-                                mode="lines",
-                                line=dict(width=2, color="#2962FF"),
-                                name="Price"
-                            ),
-                            row=1, col=1
-                        )
-                    else:
-                        # Regular candlestick chart
-                        fig.add_trace(
-                            go.Candlestick(
-                                x=data["Date"],
-                                open=data["Open"],
-                                high=data["High"],
-                                low=data["Low"],
-                                close=data["Close"],
-                                increasing_line_color=line_increasing,
-                                decreasing_line_color=line_decreasing,
-                            increasing_fillcolor=increasing_color,
-                            decreasing_fillcolor=decreasing_color,
-                            name="Price"
-                        ),
-                        row=1, col=1
+                fig = go.Figure()
+                fig.add_trace(
+                    go.Candlestick(
+                        x=data["Date"],
+                        open=data["Open"],
+                        high=data["High"],
+                        low=data["Low"],
+                        close=data["Close"],
+                        increasing_line_color=line_increasing,
+                        decreasing_line_color=line_decreasing,
+                        increasing_fillcolor=increasing_color,
+                        decreasing_fillcolor=decreasing_color,
+                        name="Price",
+                        whiskerwidth=0.5,
+                        line=dict(width=2),
+                        xperiodalignment="middle",
+                        xperiod=time_delta if len(data) > 1 else 86400,
+                        xperiod0=data['Date'].iloc[0] if len(data) > 0 else None
                     )
-                
-                    # Add volume bars to second subplot
-                    fig.add_trace(
-                        go.Bar(
-                            x=data["Date"],
-                            y=data["Volume"],
-                            marker_color=colors,
-                            name="Volume"
-                        ),
-                        row=2, col=1
-                    )
-                    
-                    # Update y-axis for volume
-                    fig.update_yaxes(title_text="Volume", row=2, col=1)
+                )
             
                 # Add Moving Averages if selected
                 if show_ma and len(data) > 0:
@@ -533,39 +393,20 @@ with tab4:
                 # Show chart patterns in an expander for clean UI
                 with st.expander("View Chart Patterns & Interpretation"):
                     st.markdown("### Common Candlestick Patterns")
-                    
-                    if selected_chart_type in ["Standard Candlestick", "Hollow Candlestick", "Candlestick with Volume"]:
-                        st.markdown("""
-                        **Bullish Patterns:**
-                        - **Hammer**: Small body at the top with a long lower wick. Suggests potential reversal after downtrend.
-                        - **Engulfing Bullish**: Bearish candle followed by a larger bullish candle that 'engulfs' the previous one.
-                        - **Morning Star**: Three-candle pattern with a bearish candle, small-bodied middle candle, and bullish candle.
-                        
-                        **Bearish Patterns:**
-                        - **Shooting Star**: Small body at the bottom with a long upper wick. Suggests potential reversal after uptrend.
-                        - **Engulfing Bearish**: Bullish candle followed by a larger bearish candle that 'engulfs' the previous one.
-                        - **Evening Star**: Three-candle pattern with a bullish candle, small-bodied middle candle, and bearish candle.
-                        """)
-                        
-                        # Add reference image
-                        st.image("https://a.c-dn.net/c/content/dam/publicsites/igcom/uk/images/ContentImage/How-to-read-candlestick-charts.png", 
-                                caption="Common Candlestick Patterns",
-                                width=400)
-    
-                    elif selected_chart_type == "Heiken Ashi":
-                        st.markdown("""
-                        **Heiken Ashi Interpretation:**
-                        - **Consecutive green candles**: Strong uptrend
-                        - **Consecutive red candles**: Strong downtrend
-                        - **Small bodies with upper and lower wicks**: Potential trend change
-                        - **Small body with long upper wick**: Resistance in uptrend
-                        - **Small body with long lower wick**: Support in downtrend
-                        """)
-                        
-                        # Add reference image for Heiken Ashi
-                        st.image("https://forexprofitway.com/wp-content/uploads/2016/11/heikin-ashi-chart-buy-sell-signals.png", 
-                                caption="Heiken Ashi Pattern Interpretation",
-                                width=400)
+                    st.markdown("""
+**Bullish Patterns:**
+- **Hammer**: Small body at the top with a long lower wick. Suggests potential reversal after downtrend.
+- **Engulfing Bullish**: Bearish candle followed by a larger bullish candle that 'engulfs' the previous one.
+- **Morning Star**: Three-candle pattern with a bearish candle, small-bodied middle candle, and bullish candle.
+
+**Bearish Patterns:**
+- **Shooting Star**: Small body at the bottom with a long upper wick. Suggests potential reversal after uptrend.
+- **Engulfing Bearish**: Bullish candle followed by a larger bearish candle that 'engulfs' the previous one.
+- **Evening Star**: Three-candle pattern with a bullish candle, small-bodied middle candle, and bearish candle.
+""")
+                    st.image("https://a.c-dn.net/c/content/dam/publicsites/igcom/uk/images/ContentImage/How-to-read-candlestick-charts.png", 
+                        caption="Common Candlestick Patterns",
+                        width=400)
     else:
         # Default chart preview in the main column
         with col1:
@@ -911,10 +752,10 @@ with tab1:
     
     # Add some contextual explanation
     st.markdown("""
-    The table above shows the current market position for each cyclical profile based on Eastern Time.
-    These positions can help you align your trading strategies with historical seasonal patterns.
-    Switch to the 'Cyclical Profiles' tab to explore detailed historical performance for each profile.
-    """)
+The table above shows the current market position for each cyclical profile based on Eastern Time.
+These positions can help you align your trading strategies with historical seasonal patterns.
+Switch to the 'Cyclical Profiles' tab to explore detailed historical performance for each profile.
+""")
 
 # --- Cyclical Profiles Tab -------------------------------------------------------
 with tab2:
