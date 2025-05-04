@@ -1,0 +1,8 @@
+.env
+docs
+.venv
+venv
+__pycache__
+cache
+calculation_logic.md
+app.py.bak
