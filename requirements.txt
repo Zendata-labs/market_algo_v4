@@ -3,3 +3,4 @@ pandas
 plotly
 azure-storage-blob
 python-dotenv
+pytz
