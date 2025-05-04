@@ -1,11 +1,11 @@
 import streamlit as st, pandas as pd, plotly.express as px, plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import pathlib, sys, datetime as dt, pytz
 sys.path.append(str(pathlib.Path(__file__).parent))
 
 from gold import config
 from gold.azure import load_csv
 from gold.seasonality import calculate_seasonality, generate_cumulative_returns, plot_seasonality
-from gold.time_matrix import prepare_data, create_timestamp_matrix, plot_time_matrix, plot_scatter_matrix, create_split_candle_chart
 from gold.profiles import BUILDERS
 from gold.date_ui import get_date_range_for_profile
 
@@ -13,7 +13,7 @@ st.set_page_config(page_title="Gold Profiles", layout="wide")
 st.title("🥇 Gold Cyclical Profiles")
 
 # Top-level tab organization
-tab1, tab2, tab3, tab4 = st.tabs(["Current Market Position", "Cyclical Profiles", "Seasonality", "Time Matrix"])
+tab1, tab2, tab3, tab4 = st.tabs(["Current Market Position", "Cyclical Profiles", "Seasonality", "Candle Charts"])
 
 # --- Sidebar controls ----------------------------------------------------
 # Profile selection dropdown with display names
@@ -49,163 +49,564 @@ start, end = get_date_range_for_profile(profile_key)
 if start > end:
     st.error("Start date after End"); st.stop()
     
-# --- Time Matrix Tab ------------------------------------------------------
+# --- Candle Charts Tab ------------------------------------------------------
 with tab4:
-    st.markdown("## Gold Time Matrix Analysis")
+    st.markdown("## Gold Candle Charts Analysis")
     
-    # Create sidebar for time matrix controls
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Time Matrix Options")
+    # Create a more trading view like layout
+    col1, col2 = st.columns([4, 1])
     
-    # Analysis type selection
-    analysis_types = [
-        "Mapping Monthly High Low Timestamps (Use Weekly)",
-        "Mapping Weekly High Low Timestamps (Use Daily)",
-        "Mapping Daily High Low Timestamps (Use Hourly)",
-        "Split Candles -> Green & Red",
-        "Mapping Monthly -> 4 Week Scatter Plot",
-        "Mapping Weekly -> 5 Day Scatter Plot",
-        "Mapping Daily -> 24hr Scatter Plot"
-    ]
-    
-    selected_analysis = st.sidebar.selectbox("Analysis Type", analysis_types)
-    
-    # Data source selection based on analysis type
-    if "Monthly" in selected_analysis:
-        data_timeframe = "m"
-        source_tf = "monthly"
-    elif "Weekly" in selected_analysis:
-        data_timeframe = "W"
-        source_tf = "weekly"
-    elif "Daily" in selected_analysis or "Split Candles" in selected_analysis:
-        data_timeframe = "d"
-        source_tf = "daily"
-    else:
-        data_timeframe = "d"  # Default
-        source_tf = "daily"
-    
-    # Target timeframe based on analysis type
-    if "Use Weekly" in selected_analysis:
-        target_tf = "weekly"
-    elif "Use Daily" in selected_analysis:
-        target_tf = "daily"
-    elif "Use Hourly" in selected_analysis:
-        target_tf = "hourly"
-    else:
-        target_tf = "daily"  # Default
-    
-    # Date range selection (similar to other tabs)
-    date_range = st.sidebar.selectbox(
-        "Date Range",
-        list(config.STANDARD_PRESETS.keys()),
-        index=1  # Default to 3Y
-    )
-    
-    # Get date range from presets
-    start_date, end_date = config.STANDARD_PRESETS[date_range]
-    
-    # Calculate and analyze button
-    analyze_button = st.sidebar.button("Generate Time Matrix", type="primary")
-    
-    # Show different UI based on the analysis type
-    if "Split Candles" in selected_analysis:
-        st.markdown("### Split Candles Analysis - Green & Red")
-        st.markdown("This analysis separates green and red candles to identify patterns specific to each type.")
-    elif "Scatter Plot" in selected_analysis:
-        if "Monthly" in selected_analysis:
-            scatter_type = "month"
-            period_unit = "4 weeks"
-        elif "Weekly" in selected_analysis:
-            scatter_type = "week"
-            period_unit = "5 days"
-        else:  # Daily
-            scatter_type = "day"
-            period_unit = "24 hours"
-            
-        st.markdown(f"### Timestamp Scatter Plot - {scatter_type.title()} ({period_unit})")
-        st.markdown(f"This visualization shows when highs and lows typically occur within a {scatter_type}.")
-    else:
-        st.markdown(f"### High/Low Timestamp Analysis - {source_tf.title()} using {target_tf.title()} data")
-        st.markdown(f"This analysis maps when price highs and lows occur within {source_tf} periods.")
-    
-    # Load and process data when the button is clicked
-    if analyze_button or 'time_matrix_figure' in st.session_state:
-        with st.spinner("Generating Time Matrix Analysis..."):
-            # Get data file based on timeframe
-            try:
-                data_file = config.TIMEFRAME_FILES[data_timeframe]
-            except KeyError:
-                st.error(f"No data file available for timeframe {data_timeframe}")
-                st.stop()
-            
-            # Load data with caching
-            @st.cache_data(show_spinner=False)
-            def load_time_matrix_data(file_key):
-                df = load_csv(file_key)
-                return df
-            
-            # Load and prepare data
-            data = load_time_matrix_data(data_file)
-            
-            # Filter by date range
-            data["Date"] = pd.to_datetime(data["Date"])
-            data = data[(data["Date"] >= pd.Timestamp(start_date)) & 
-                        (data["Date"] <= pd.Timestamp(end_date))]
-            
-            # Prepare data for analysis
-            prepared_data = prepare_data(data, timeframe=source_tf)
-            
-            # Create visualization based on selected analysis
-            if "Split Candles" in selected_analysis:
-                time_matrix_figure = create_split_candle_chart(
-                    prepared_data, 
-                    title=f"Split Candle Analysis ({date_range})"
-                )
-            elif "Scatter Plot" in selected_analysis:
-                # First create timestamp matrix
-                timestamp_data = create_timestamp_matrix(
-                    prepared_data,
-                    source_timeframe=source_tf,
-                    target_timeframe=target_tf
-                )
-                
-                # Then create scatter plot
-                time_matrix_figure = plot_scatter_matrix(
-                    timestamp_data,
-                    scatter_type=scatter_type,
-                    title=f"{source_tf.title()} Highs/Lows Scatter ({date_range})"
-                )
-            else:
-                # Create timestamp matrix
-                timestamp_data = create_timestamp_matrix(
-                    prepared_data,
-                    source_timeframe=source_tf,
-                    target_timeframe=target_tf
-                )
-                
-                # Create time matrix plot
-                time_matrix_figure = plot_time_matrix(
-                    timestamp_data,
-                    title=f"{source_tf.title()} Highs/Lows using {target_tf.title()} Data ({date_range})"
-                )
-            
-            # Save to session state
-            st.session_state['time_matrix_figure'] = time_matrix_figure
+    with col2:
+        st.markdown("### Chart Settings")
         
-        # Display the figure
-        st.plotly_chart(st.session_state['time_matrix_figure'], use_container_width=True)
+        # Timeframe buttons in a row for quick switching (TradingView style)
+        st.markdown("**Timeframe:**")
+        timeframe_cols = st.columns(5)
         
-        # Additional information based on analysis type
-        if "Scatter Plot" not in selected_analysis and "Split Candles" not in selected_analysis:
-            st.subheader("Interpretation Guide")
-            st.markdown(f"""
-            - **Top Panel**: Shows when **highs** typically occur within {source_tf} periods
-            - **Bottom Panel**: Shows when **lows** typically occur within {source_tf} periods
-            - Higher bars indicate more frequent occurrences at that specific time
+        timeframe_options = {
+            "Monthly": "m",
+            "Weekly": "W",
+            "Daily": "d",
+            "1h": "h1",
+            "4h": "4h"
+        }
+        
+        # Store the selected timeframe in session state if not already there
+        if 'selected_timeframe_key' not in st.session_state:
+            st.session_state['selected_timeframe_key'] = "d"  # Default to daily
+            st.session_state['selected_timeframe_name'] = "Daily"
+        
+        # Create timeframe buttons
+        if timeframe_cols[0].button("Monthly", use_container_width=True):
+            st.session_state['selected_timeframe_key'] = "m"
+            st.session_state['selected_timeframe_name'] = "Monthly"
+        
+        if timeframe_cols[1].button("Weekly", use_container_width=True):
+            st.session_state['selected_timeframe_key'] = "W"
+            st.session_state['selected_timeframe_name'] = "Weekly"
+            
+        if timeframe_cols[2].button("Daily", use_container_width=True):
+            st.session_state['selected_timeframe_key'] = "d"
+            st.session_state['selected_timeframe_name'] = "Daily"
+            
+        if timeframe_cols[3].button("1h", use_container_width=True):
+            st.session_state['selected_timeframe_key'] = "h1"
+            st.session_state['selected_timeframe_name'] = "1-Hour"
+            
+        if timeframe_cols[4].button("4h", use_container_width=True):
+            st.session_state['selected_timeframe_key'] = "4h"
+            st.session_state['selected_timeframe_name'] = "4-Hour"
+        
+        # Chart type selection
+        st.markdown("**Chart Type:**")
+        chart_types = [
+            "Standard Candlestick",
+            "Candlestick with Volume",
+            "Hollow Candlestick",
+            "Heiken Ashi",
+            "Line Chart"
+        ]
+        
+        selected_chart_type = st.selectbox("Select Chart Type", chart_types, label_visibility="collapsed")
+
+        # Technical indicators
+        st.markdown("**Indicators:**")
+        show_ma = st.checkbox("Moving Averages", value=True)
+        if show_ma:
+            ma_periods = st.multiselect(
+                "MA Periods",
+                [20, 50, 100, 200],
+                default=[50, 200]
+            )
+        
+        show_bollinger = st.checkbox("Bollinger Bands", value=False)
+        if show_bollinger:
+            bollinger_period = st.slider("Period", 10, 50, 20)
+            bollinger_std = st.slider("Std Dev", 1.0, 3.0, 2.0, 0.1)
+        
+        # Date ranges - more compact layout
+        st.markdown("**Date Range:**")
+        date_ranges = list(config.STANDARD_PRESETS.keys())
+        date_range = st.selectbox(
+            "Time Period",
+            date_ranges,
+            index=1,  # Default to 3Y
+            label_visibility="collapsed"
+        )
+        
+        # Get date range from presets
+        start_date, end_date = config.STANDARD_PRESETS[date_range]
+        
+        # Show currently selected settings
+        st.markdown("---")
+        st.markdown(f"**Current View:**")
+        st.markdown(f"📊 **{st.session_state['selected_timeframe_name']}** candlesticks")
+        st.markdown(f"📅 **{date_range}** time period")
+        
+        # Generate chart button
+        generate_button = st.button("Update Chart", type="primary", use_container_width=True)
+    
+    # Use timeframe key from session state
+    timeframe_key = st.session_state['selected_timeframe_key']
+    
+    # Move chart info to the left column
+    with col1:
+        # Chart title displays the current timeframe
+        st.subheader(f"{selected_chart_type} - {st.session_state['selected_timeframe_name']}")
+        
+        # Description appears below chart once generated
+        chart_descriptions = {
+            "Standard Candlestick": """
+            Candlestick charts display the high, low, open, and close prices for each period.
+            - **Green candles**: Close price higher than open price (bullish)
+            - **Red candles**: Close price lower than open price (bearish)
+            """,
+            
+            "Candlestick with Volume": """
+            Combines standard candlesticks with volume bars to show trading activity.
+            Volume can confirm price movements or indicate potential reversals.
+            """,
+            
+            "Hollow Candlestick": """
+            Similar to standard candlesticks but with hollow bodies for bullish candles.
+            This makes it easier to distinguish between bullish and bearish periods.
+            """,
+            
+            "Heiken Ashi": """
+            Heiken Ashi ('Average Bar' in Japanese) uses modified price values that
+            smooth price action to help identify trends more clearly.
+            """,
+            
+            "Line Chart": """
+            Simple line chart showing closing prices over time.
+            Useful for viewing the overall trend without the noise of individual candles.
+            """
+        }
+    
+    # Generate and display the chart - always show in col1
+    if generate_button or 'candle_chart' in st.session_state:
+        with col1:
+            with st.spinner(f"Generating {selected_chart_type} for {st.session_state['selected_timeframe_name']} data..."):
+                # Load data file
+                try:
+                    data_file = config.TIMEFRAME_FILES[timeframe_key]
+                except KeyError:
+                    st.error(f"No data file available for timeframe {timeframe_key}")
+                    st.stop()
+                
+                # Load data with caching
+                @st.cache_data(show_spinner=False)
+                def load_chart_data(file_key):
+                    df = load_csv(file_key)
+                    return df
+                
+                # Load and prepare data
+                data = load_chart_data(data_file)
+            
+                # Ensure datetime format and numeric columns
+                data["Date"] = pd.to_datetime(data["Date"])
+                
+                # Filter by date range
+                data = data[(data["Date"] >= pd.Timestamp(start_date)) & 
+                           (data["Date"] <= pd.Timestamp(end_date))]
+                
+                # Convert price columns to numeric if needed
+                for col in ["Open", "High", "Low", "Close", "Volume"]:
+                    if col in data.columns and data[col].dtype == object:
+                        data[col] = data[col].astype(str).str.replace(',', '').astype(float)
+            
+                # Calculate additional data for different chart types
+                if selected_chart_type == "Heiken Ashi":
+                    # Calculate Heiken Ashi values
+                    ha_data = data.copy()
+                    ha_data['HA_Close'] = (data['Open'] + data['High'] + data['Low'] + data['Close']) / 4
+                    
+                    # Initialize HA Open with the first candle's open price
+                    ha_open = [data['Open'].iloc[0]]
+                    
+                    # Calculate HA Open for the rest of the candles
+                    for i in range(1, len(data)):
+                        ha_open.append((ha_open[-1] + ha_data['HA_Close'].iloc[i-1]) / 2)
+                    
+                    ha_data['HA_Open'] = ha_open
+                    ha_data['HA_High'] = ha_data[['High', 'HA_Open', 'HA_Close']].max(axis=1)
+                    ha_data['HA_Low'] = ha_data[['Low', 'HA_Open', 'HA_Close']].min(axis=1)
+                    
+                    # Replace standard OHLC with Heiken Ashi values
+                    data['Open'] = ha_data['HA_Open']
+                    data['High'] = ha_data['HA_High']
+                    data['Low'] = ha_data['HA_Low']
+                    data['Close'] = ha_data['HA_Close']
+            
+                # Create plot based on chart type
+                fig = go.Figure()
+                
+                # Add candlestick trace
+                if selected_chart_type == "Hollow Candlestick":
+                    # Create color arrays for hollow candles
+                    increasing_color = 'rgba(38, 166, 154, 0.2)'  # Semi-transparent green fill
+                    decreasing_color = 'rgba(239, 83, 80, 1)'     # Solid red
+                    line_increasing = 'rgba(38, 166, 154, 1)'     # Green border
+                    line_decreasing = 'rgba(239, 83, 80, 1)'      # Red border
+                else:  # Standard colors for other types
+                    increasing_color = '#26a69a'  # Green
+                    decreasing_color = '#ef5350'  # Red
+                    line_increasing = '#26a69a'
+                    line_decreasing = '#ef5350'
+            
+                # Add the appropriate chart type
+                if selected_chart_type == "Line Chart":
+                    # Use line chart instead of candlesticks
+                    fig.add_trace(
+                        go.Scatter(
+                            x=data["Date"],
+                            y=data["Close"],
+                            mode="lines",
+                            line=dict(width=2, color="#2962FF"),
+                            name="Price"
+                        )
+                    )
+                else:
+                    # Adjust candle width based on timeframe for better visibility
+                    # Get time delta between consecutive candles to set appropriate width
+                    if len(data) > 1:
+                        time_delta = (data['Date'].iloc[1] - data['Date'].iloc[0]).total_seconds()
+                        
+                        # Set candle width based on timeframe
+                        if time_delta >= 86400 * 30:  # Monthly
+                            candle_width = 20
+                        elif time_delta >= 86400 * 7:  # Weekly
+                            candle_width = 12  
+                        elif time_delta >= 86400:  # Daily
+                            candle_width = 8
+                        elif time_delta >= 3600:  # Hourly
+                            candle_width = 4
+                        else:  # Any other timeframe
+                            candle_width = 6
+                    else:
+                        candle_width = 8  # Default width
+                        
+                    # Regular candlestick chart with proper candle sizing
+                    fig.add_trace(
+                        go.Candlestick(
+                            x=data["Date"],
+                            open=data["Open"],
+                            high=data["High"],
+                            low=data["Low"],
+                            close=data["Close"],
+                            increasing_line_color=line_increasing,
+                            decreasing_line_color=line_decreasing,
+                            increasing_fillcolor=increasing_color,
+                            decreasing_fillcolor=decreasing_color,
+                            name="Price",
+                            whiskerwidth=0.5,  # Thicker whiskers for high/low
+                            line=dict(width=2),  # Thicker candle outlines
+                            xperiodalignment="middle",  # Center candles on time period
+                            xperiod=time_delta if len(data) > 1 else 86400,  # Period matching time delta
+                            xperiod0=data['Date'].iloc[0] if len(data) > 0 else None
+                        )
+                    )
+            
+                # Add volume if selected
+                if selected_chart_type == "Candlestick with Volume" and "Volume" in data.columns:
+                    # Create volume colors based on price direction
+                    colors = [increasing_color if data['Close'].iloc[i] >= data['Open'].iloc[i] 
+                              else decreasing_color for i in range(len(data))]
+                    
+                    # Create a new row for volume subplot
+                    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                                       vertical_spacing=0.02, 
+                                       row_heights=[0.8, 0.2])
+                
+                    # Re-add price chart to first subplot
+                    if selected_chart_type == "Line Chart":
+                        # Use line chart instead of candlesticks
+                        fig.add_trace(
+                            go.Scatter(
+                                x=data["Date"],
+                                y=data["Close"],
+                                mode="lines",
+                                line=dict(width=2, color="#2962FF"),
+                                name="Price"
+                            ),
+                            row=1, col=1
+                        )
+                    else:
+                        # Regular candlestick chart
+                        fig.add_trace(
+                            go.Candlestick(
+                                x=data["Date"],
+                                open=data["Open"],
+                                high=data["High"],
+                                low=data["Low"],
+                                close=data["Close"],
+                                increasing_line_color=line_increasing,
+                                decreasing_line_color=line_decreasing,
+                            increasing_fillcolor=increasing_color,
+                            decreasing_fillcolor=decreasing_color,
+                            name="Price"
+                        ),
+                        row=1, col=1
+                    )
+                
+                    # Add volume bars to second subplot
+                    fig.add_trace(
+                        go.Bar(
+                            x=data["Date"],
+                            y=data["Volume"],
+                            marker_color=colors,
+                            name="Volume"
+                        ),
+                        row=2, col=1
+                    )
+                    
+                    # Update y-axis for volume
+                    fig.update_yaxes(title_text="Volume", row=2, col=1)
+            
+                # Add Moving Averages if selected
+                if show_ma and len(data) > 0:
+                    for period in ma_periods:
+                        if len(data) >= period:
+                            ma = data["Close"].rolling(window=period).mean()
+                            # Check if this is a subplot figure (for volume charts)
+                            if selected_chart_type == "Candlestick with Volume" and "Volume" in data.columns:
+                                # This is a subplot figure
+                                fig.add_trace(
+                                    go.Scatter(
+                                        x=data["Date"],
+                                        y=ma,
+                                        line=dict(width=1.5),
+                                        name=f"MA{period}"
+                                    ),
+                                    row=1, col=1
+                                )
+                            else:
+                                # This is a regular figure without subplots
+                                fig.add_trace(
+                                    go.Scatter(
+                                        x=data["Date"],
+                                        y=ma,
+                                        line=dict(width=1.5),
+                                        name=f"MA{period}"
+                                    )
+                                )
+            
+                # Add Bollinger Bands if selected
+                if show_bollinger and len(data) >= bollinger_period:
+                    mid_band = data["Close"].rolling(window=bollinger_period).mean()
+                    std_dev = data["Close"].rolling(window=bollinger_period).std()
+                
+                    upper_band = mid_band + (std_dev * bollinger_std)
+                    lower_band = mid_band - (std_dev * bollinger_std)
+                    
+                    # Add mid band
+                    # Check if this is a subplot figure (for volume charts)
+                    if selected_chart_type == "Candlestick with Volume" and "Volume" in data.columns:
+                        # This is a subplot figure
+                        fig.add_trace(
+                            go.Scatter(
+                                x=data["Date"],
+                                y=mid_band,
+                                line=dict(width=1, color='rgba(200, 200, 200, 0.8)'),
+                                name=f"BB Mid ({bollinger_period})"
+                            ),
+                            row=1, col=1
+                        )
+                    else:
+                        # This is a regular figure without subplots
+                        fig.add_trace(
+                            go.Scatter(
+                                x=data["Date"],
+                                y=mid_band,
+                                line=dict(width=1, color='rgba(200, 200, 200, 0.8)'),
+                                name=f"BB Mid ({bollinger_period})"
+                            )
+                        )
+                    
+                    # Add upper band
+                    if selected_chart_type == "Candlestick with Volume" and "Volume" in data.columns:
+                        # This is a subplot figure
+                        fig.add_trace(
+                            go.Scatter(
+                                x=data["Date"],
+                                y=upper_band,
+                                line=dict(width=1, color='rgba(200, 200, 200, 0.6)'),
+                                fill=None,
+                                name=f"BB Upper ({bollinger_std}σ)"
+                            ),
+                            row=1, col=1
+                        )
+                        
+                        # Add lower band with fill
+                        fig.add_trace(
+                            go.Scatter(
+                                x=data["Date"],
+                                y=lower_band,
+                                line=dict(width=1, color='rgba(200, 200, 200, 0.6)'),
+                                fill='tonexty',  # Fill area between upper and lower bands
+                                fillcolor='rgba(200, 200, 200, 0.2)',
+                                name=f"BB Lower ({bollinger_std}σ)"
+                            ),
+                            row=1, col=1
+                        )
+                    else:
+                        # This is a regular figure without subplots
+                        fig.add_trace(
+                            go.Scatter(
+                                x=data["Date"],
+                                y=upper_band,
+                                line=dict(width=1, color='rgba(200, 200, 200, 0.6)'),
+                                fill=None,
+                                name=f"BB Upper ({bollinger_std}σ)"
+                            )
+                        )
+                        
+                        # Add lower band with fill
+                        fig.add_trace(
+                            go.Scatter(
+                                x=data["Date"],
+                                y=lower_band,
+                                line=dict(width=1, color='rgba(200, 200, 200, 0.6)'),
+                                fill='tonexty',  # Fill area between upper and lower bands
+                                fillcolor='rgba(200, 200, 200, 0.2)',
+                                name=f"BB Lower ({bollinger_std}σ)"
+                            )
+                        )
+            
+                # Update layout
+                title = f"{selected_chart_type} - {st.session_state['selected_timeframe_name']} ({date_range})"
+                
+                fig.update_layout(
+                    title=title,
+                    xaxis_title="",
+                    yaxis_title="Price",
+                    xaxis_rangeslider_visible=False,  # Hide range slider for cleaner look
+                    template="plotly_dark",
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=1.02,
+                        xanchor="right",
+                        x=1
+                    ),
+                    height=700,
+                    margin=dict(l=20, r=20, t=50, b=20),
+                    showlegend=True,
+                    paper_bgcolor='#1c1c1c',  # Darker background like TradingView
+                    plot_bgcolor='#1c1c1c',   # Darker plot area
+                    hovermode='x unified',    # Better hover behavior
+                    # Better grid styling
+                    xaxis=dict(
+                        showgrid=True,
+                        gridcolor='rgba(80, 80, 80, 0.3)',
+                        gridwidth=0.5,
+                        showspikes=True,  # Add price spikes on hover
+                        spikethickness=1,
+                        spikecolor="#999999",
+                        spikedash="solid"
+                    ),
+                    yaxis=dict(
+                        showgrid=True,
+                        gridcolor='rgba(80, 80, 80, 0.3)',
+                        gridwidth=0.5,
+                        showspikes=True,  # Add price spikes on hover
+                        spikethickness=1,
+                        spikecolor="#999999",
+                        spikedash="solid"
+                    )
+                )
+            
+                # Set the y-axis to logarithmic scale for long-term charts
+                if date_range in ["5Y", "10Y", "Full"]:
+                    fig.update_yaxes(type="log")
+                
+                # Save to session state
+                st.session_state['candle_chart'] = fig
+            
+                # Display the chart with full width and proper height
+                st.plotly_chart(st.session_state['candle_chart'], use_container_width=True)
+                
+                # Show the chart description
+                if selected_chart_type in chart_descriptions:
+                    st.markdown(chart_descriptions[selected_chart_type])
+                
+                # Show chart patterns in an expander for clean UI
+                with st.expander("View Chart Patterns & Interpretation"):
+                    st.markdown("### Common Candlestick Patterns")
+                    
+                    if selected_chart_type in ["Standard Candlestick", "Hollow Candlestick", "Candlestick with Volume"]:
+                        st.markdown("""
+                        **Bullish Patterns:**
+                        - **Hammer**: Small body at the top with a long lower wick. Suggests potential reversal after downtrend.
+                        - **Engulfing Bullish**: Bearish candle followed by a larger bullish candle that 'engulfs' the previous one.
+                        - **Morning Star**: Three-candle pattern with a bearish candle, small-bodied middle candle, and bullish candle.
+                        
+                        **Bearish Patterns:**
+                        - **Shooting Star**: Small body at the bottom with a long upper wick. Suggests potential reversal after uptrend.
+                        - **Engulfing Bearish**: Bullish candle followed by a larger bearish candle that 'engulfs' the previous one.
+                        - **Evening Star**: Three-candle pattern with a bullish candle, small-bodied middle candle, and bearish candle.
+                        """)
+                        
+                        # Add reference image
+                        st.image("https://a.c-dn.net/c/content/dam/publicsites/igcom/uk/images/ContentImage/How-to-read-candlestick-charts.png", 
+                                caption="Common Candlestick Patterns",
+                                width=400)
+    
+                    elif selected_chart_type == "Heiken Ashi":
+                        st.markdown("""
+                        **Heiken Ashi Interpretation:**
+                        - **Consecutive green candles**: Strong uptrend
+                        - **Consecutive red candles**: Strong downtrend
+                        - **Small bodies with upper and lower wicks**: Potential trend change
+                        - **Small body with long upper wick**: Resistance in uptrend
+                        - **Small body with long lower wick**: Support in downtrend
+                        """)
+                        
+                        # Add reference image for Heiken Ashi
+                        st.image("https://forexprofitway.com/wp-content/uploads/2016/11/heikin-ashi-chart-buy-sell-signals.png", 
+                                caption="Heiken Ashi Pattern Interpretation",
+                                width=400)
+    else:
+        # Default chart preview in the main column
+        with col1:
+            st.info("Use the controls on the right to configure your chart, then click 'Update Chart' to generate the candle chart.")
+            
+            # Show an example TradingView-like chart as a placeholder
+            st.image("https://d2.alternativeto.net/dist/s/tradingview_912128_full.jpg?format=jpg&width=1600&height=1600&mode=min&upscale=false", 
+                    caption="Sample Gold Chart - Click 'Update Chart' to view live data",
+                    use_column_width=True)
+            
+            # Add quick guide to chart types
+            st.markdown("### Chart Types Available")
+            st.markdown("""
+            - **Standard Candlestick**: Traditional OHLC display
+            - **Candlestick with Volume**: Adds volume bars below the main chart
+            - **Hollow Candlestick**: Hollow bodies for bullish candles
+            - **Heiken Ashi**: Smoothed price action for trend identification
+            - **Line Chart**: Simple line chart showing closing prices
             """)
-    else:
-        # Default instruction message
-        st.info("Select your analysis type and click 'Generate Time Matrix' to view the results.")
+            
+            # Add note about timeframes
+            st.markdown("### Available Timeframes")
+            st.markdown("""
+            Switch between timeframes using the buttons at the top right:
+            - **Monthly**: Long-term analysis (each candle is one month)
+            - **Weekly**: Medium-term analysis (each candle is one week)
+            - **Daily**: Standard analysis (each candle is one day)
+            - **1h**: Short-term analysis (each candle is one hour)
+            - **4h**: Intraday analysis (each candle is four hours)
+            """)
+            
+            # Add instruction about technical indicators
+            st.markdown("### Technical Indicators")
+            st.markdown("""
+            Add technical indicators using the checkboxes:
+            - **Moving Averages**: Add multiple MAs with different periods
+            - **Bollinger Bands**: Add standard deviation bands around price
+            """)
+            
+            # Add some space
+            st.write("")
 
 # --- Seasonality Tab ----------------------------------------------------
 with tab3:
