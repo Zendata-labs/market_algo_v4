@@ -716,7 +716,12 @@ with tab1:
             current_position = current_time.year % 10
             max_position = 10
         elif prof_key == 'presidential':
-            current_position = (current_time.year % 4) + 1
+            # Presidential cycle: Year 1 starts in years like 1977, 1981, 1985, 1989, 1993, etc.
+            # Year 4 (Election Year) is years like 1980, 1984, 1988, 1992, 1996, etc.
+            # 2021-2024 was a cycle, so 2025 is Year 1 of new cycle
+            # To calculate: Base from 1977, then find position in 4-year cycle
+            year_in_cycle = ((current_time.year - 1977) % 4) + 1
+            current_position = year_in_cycle
             max_position = 4
         elif prof_key == 'quarter':
             current_position = (current_time.month - 1) // 3 + 1
