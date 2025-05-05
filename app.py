@@ -731,19 +731,86 @@ with tab1:
             current_position = ((current_time.day - 1) // 7) + 1
             max_position = 4 if current_position <= 4 else 5
         elif prof_key == 'day_of_week':
-            current_position = current_time.weekday() + 1
-            max_position = 5
+            # Gold market trading hours (Eastern Time):
+            # Open: Sunday 6:00 PM ET to Friday 5:00 PM ET
+            # Closed: Friday 5:00 PM ET to Sunday 6:00 PM ET
+            weekday = current_time.weekday()
+            hour = current_time.hour
+            minute = current_time.minute
+            
+            is_market_closed = False
+            
+            # Check if market is closed based on trading schedule
+            if weekday == 5:  # Saturday - always closed
+                is_market_closed = True
+            elif weekday == 6 and (hour < 18):  # Sunday before 6:00 PM ET
+                is_market_closed = True
+            elif weekday == 4 and (hour >= 17):  # Friday after 5:00 PM ET
+                is_market_closed = True
+                
+            if is_market_closed:
+                current_position = "Market is closed today"
+                max_position = ""
+            else:
+                # Market is open - show position 1-5 for weekdays
+                # Sunday evening and Friday during day are treated as 1 and 5 respectively
+                if weekday == 6:  # Sunday
+                    day_pos = 1  # Treat as first day
+                else:  # Monday(0) to Friday(4)
+                    day_pos = weekday + 1
+                    
+                current_position = day_pos
+                max_position = 5
+                
         elif prof_key == 'session':
-            current_position = current_time.weekday() + 1
-            max_position = 5
+            # Gold market trading hours (Eastern Time):
+            # Open: Sunday 6:00 PM ET to Friday 5:00 PM ET
+            # Closed: Friday 5:00 PM ET to Sunday 6:00 PM ET
+            weekday = current_time.weekday()
+            hour = current_time.hour
+            minute = current_time.minute
+            
+            is_market_closed = False
+            
+            # Check if market is closed based on trading schedule
+            if weekday == 5:  # Saturday - always closed
+                is_market_closed = True
+            elif weekday == 6 and (hour < 18):  # Sunday before 6:00 PM ET
+                is_market_closed = True
+            elif weekday == 4 and (hour >= 17):  # Friday after 5:00 PM ET
+                is_market_closed = True
+                
+            if is_market_closed:
+                current_position = "Market is closed today"
+                max_position = ""
+            else:
+                # Market is open - show session
+                # For simplicity, use 3 trading sessions: Asia, London, NY
+                # 1 = Asia, 2 = London, 3 = NY (simplified)
+                # Use hour to determine current session
+                if 0 <= hour < 8:
+                    session_pos = 1  # Asia session
+                elif 8 <= hour < 16:
+                    session_pos = 2  # London session
+                else:
+                    session_pos = 3  # NY session
+                    
+                current_position = session_pos
+                max_position = 3
         
         # Format the profile name for better display
         formatted_profile = prof_key.replace('_', ' ').title()
         
-        positions_data.append({
-            'Profile': formatted_profile,
-            'Position': f"{current_position} of {max_position}"
-        })
+        if prof_key in ['day_of_week', 'session'] and current_position == "Market is closed today":
+            positions_data.append({
+                'Profile': formatted_profile,
+                'Position': current_position
+            })
+        else:
+            positions_data.append({
+                'Profile': formatted_profile,
+                'Position': f"{current_position} of {max_position}"
+            })
     
     # Create and display the position table
     position_df = pd.DataFrame(positions_data)
