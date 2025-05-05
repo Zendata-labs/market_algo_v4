@@ -387,8 +387,7 @@ with tab4:
                 st.plotly_chart(st.session_state['candle_chart'], use_container_width=True)
                 
                 # Show the chart description
-                if selected_chart_type in chart_descriptions:
-                    st.markdown(chart_descriptions[selected_chart_type])
+                st.markdown(chart_description)
                 
                 # Show chart patterns in an expander for clean UI
                 with st.expander("View Chart Patterns & Interpretation"):
