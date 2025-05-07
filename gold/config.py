@@ -249,7 +249,7 @@ PROFILE_MIN_PERIODS = {
 PROFILE_DISPLAY_NAMES = {
     "decennial": "Decennial Profile",
     "presidential": "Presidential Profile",
-    "quarter": "Annual Quarter Profile",
+    "quarter": "Quarterly Profile",
     "month": "Monthly Profile",
     "week_of_year": "Weekly Profiles (Year)",
     "week_of_month": "Weekly Profiles (Month)",
