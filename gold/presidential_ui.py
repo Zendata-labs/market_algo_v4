@@ -6,15 +6,27 @@ import datetime as dt
 import pandas as pd
 from . import config
 
-def presidential_date_ui(preset_options, default_preset_index, min_days):
+def presidential_date_ui(preset_options, default_preset_index, min_days, key_prefix=""):
     """
     Specialized UI for presidential cycle profile (4-year periods).
+    
+    Args:
+        preset_options: List of preset options
+        default_preset_index: Default selected index
+        min_days: Minimum number of days required
+        key_prefix: Prefix for widget keys to ensure uniqueness
     """
     # Add a custom option to the presets
     all_options = preset_options + ["Custom Range"]
     
+    # Create unique widget keys
+    preset_key = f"{key_prefix}_presidential_preset_selectbox"
+    custom_range_key = f"{key_prefix}_presidential_custom_range_checkbox"
+    start_year_key = f"{key_prefix}_presidential_start_year_select"
+    end_year_key = f"{key_prefix}_presidential_end_year_select"
+    
     # Show presidential cycle presets as a dropdown
-    preset = st.sidebar.selectbox("Presidential Cycles", all_options, default_preset_index)
+    preset = st.sidebar.selectbox("Presidential Cycles", all_options, default_preset_index, key=preset_key)
     
     # Default values
     if preset == "Custom Range":
@@ -37,7 +49,7 @@ def presidential_date_ui(preset_options, default_preset_index, min_days):
     valid_years.sort()  # Sort in ascending order
     
     # Check if user wants to use a custom date range
-    custom_range = st.sidebar.checkbox("Custom Date Range", value=(preset == "Custom Range"))
+    custom_range = st.sidebar.checkbox("Custom Date Range", value=(preset == "Custom Range"), key=custom_range_key)
     
     if custom_range:
         # Show simplified date selection UI with dropdowns for election years
@@ -51,8 +63,8 @@ def presidential_date_ui(preset_options, default_preset_index, min_days):
                     start_year_index = i
             
             start_year = st.selectbox("Start Election Year", 
-                                     valid_years, 
-                                     index=start_year_index)
+                                      valid_years, 
+                                      index=start_year_index, key=start_year_key)
     
         # Filter end years to be after start_year and no greater than complete_year
         valid_end_years = [y for y in valid_years if y > start_year and y <= config.complete_year]
@@ -68,7 +80,8 @@ def presidential_date_ui(preset_options, default_preset_index, min_days):
                     
             end_year = st.selectbox("End Election Year", 
                                    valid_end_years,
-                                   index=min(end_year_index, len(valid_end_years)-1))
+                                   index=min(end_year_index, len(valid_end_years)-1),
+                                   key=end_year_key)
         
         # Create date objects (full year range)
         start = dt.date(start_year, 1, 1)

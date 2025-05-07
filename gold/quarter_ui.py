@@ -6,15 +6,30 @@ import datetime as dt
 import pandas as pd
 from . import config
 
-def quarter_date_ui(preset_options, default_preset_index, min_days):
+def quarter_date_ui(preset_options, default_preset_index, min_days, key_prefix=""):
     """
     Specialized UI for quarterly profile (3-month periods).
+    
+    Args:
+        preset_options: List of preset options
+        default_preset_index: Default selected index
+        min_days: Minimum number of days required
+        key_prefix: Prefix for widget keys to ensure uniqueness
     """
     # Add a custom option to the presets
     all_options = preset_options + ["Custom Range"]
     
+    # Create unique widget keys
+    preset_key = f"{key_prefix}_quarter_preset_selectbox"
+    custom_range_key = f"{key_prefix}_quarter_custom_range_checkbox"
+    year_key = f"{key_prefix}_quarter_year_select"
+    q_start_key = f"{key_prefix}_quarter_start_select"
+    q_end_key = f"{key_prefix}_quarter_end_select"
+    expand_range_key = f"{key_prefix}_quarter_expand_range_checkbox"
+    quarters_to_add_key = f"{key_prefix}_quarter_add_slider"
+    
     # Show quarter presets as a dropdown
-    preset = st.sidebar.selectbox("Quarter Periods", all_options, default_preset_index)
+    preset = st.sidebar.selectbox("Quarter Periods", all_options, default_preset_index, key=preset_key)
     
     # Default values
     if preset == "Custom Range":
@@ -30,7 +45,7 @@ def quarter_date_ui(preset_options, default_preset_index, min_days):
     last_complete_q_year = config.last_complete_q_year
     
     # Check if user wants custom date range
-    custom_range = st.sidebar.checkbox("Custom Date Range", value=(preset == "Custom Range"))
+    custom_range = st.sidebar.checkbox("Custom Date Range", value=(preset == "Custom Range"), key=custom_range_key)
     
     if custom_range:
         # Only show years up to the year with complete data
@@ -41,7 +56,7 @@ def quarter_date_ui(preset_options, default_preset_index, min_days):
         col1, col2 = st.sidebar.columns(2)
         
         with col1:
-            year = st.selectbox("Year", valid_years, index=default_year_index)
+            year = st.selectbox("Year", valid_years, index=default_year_index, key=year_key)
         
         with col2:
             # Calculate which quarters are complete for the selected year
@@ -65,7 +80,8 @@ def quarter_date_ui(preset_options, default_preset_index, min_days):
             
             quarter_index = st.selectbox("Quarter", range(len(valid_quarters)), 
                                         index=default_q_index,
-                                        format_func=lambda i: quarter_labels[i])
+                                        format_func=lambda i: quarter_labels[i],
+                                        key=q_start_key)
             quarter = valid_quarters[quarter_index]
         
         # Calculate start and end dates based on selected quarter
@@ -78,10 +94,10 @@ def quarter_date_ui(preset_options, default_preset_index, min_days):
     
     # Option to expand range (only if using custom range)
     if custom_range:
-        expand_range = st.sidebar.checkbox("Include additional quarters")
+        expand_range = st.sidebar.checkbox("Include additional quarters", key=expand_range_key)
         
         if expand_range:
-            quarters_to_add = st.sidebar.slider("Additional quarters", 1, 20, 3)
+            quarters_to_add = st.sidebar.slider("Additional quarters", 1, 20, 3, key=quarters_to_add_key)
             
             # Extend end date by adding quarters
             end_quarter = quarter

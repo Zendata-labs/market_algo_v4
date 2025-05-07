@@ -143,25 +143,40 @@ def plot_seasonality(return_data, title="Gold Seasonality"):
     month_positions = [15, 45, 75, 105, 135, 165, 195, 225, 255, 285, 315, 345]
     month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     
-    # Set default colors for better visibility
+    # Set enhanced colors for better visibility
     colors = {
-        "5YR": "#1E88E5",  # Blue
-        "10YR": "#00C853",  # Green
-        "15YR": "#FFC107",  # Gold/yellow
-        "YTD": "#E91E63"    # Pink/red
+        "5YR": "#00CC66",    # Green for 5-year
+        "10YR": "#3366FF",   # Blue for 10-year
+        "15YR": "#9933CC",   # Purple for 15-year
+        "YTD": "#FF4D4D"     # Bright red for YTD
     }
     
     # Track min/max for dynamic y-axis scaling
     all_values = []
     
+    # Import datetime for YTD handling
+    from datetime import datetime
+    current_date = datetime.now()
+    current_month = current_date.month
+    current_day = current_date.day
+    ytd_cutoff_day = current_month * 30 + min(current_day, 15)  # Rough approximation for current position in year
+    
     # Add data series
     for key, df in return_data.items():
+        # For YTD, limit to current month (mid-March 2025)
         if key == "YTD":
             name = "Year to Date"
-            line_width = 3
+            line_width = 1.5  # Thinner line for cleaner look
+            # Filter to show only data up to current month
+            df = df[df["DayOfYear"] <= ytd_cutoff_day].copy()
+            # If empty after filtering, skip this trace
+            if df.empty:
+                continue
+            mode = "lines"  # Simple lines, no markers
         else:
             name = f"{key[:-2]} Year Average"
-            line_width = 2
+            line_width = 1.0  # Even thinner for historical averages
+            mode = "lines"  # Simple lines, no markers
         
         # Collect values for scaling
         all_values.extend(df["CumulativeReturn"].tolist())
@@ -170,12 +185,13 @@ def plot_seasonality(return_data, title="Gold Seasonality"):
             go.Scatter(
                 x=df["DayOfYear"],
                 y=df["CumulativeReturn"],
-                mode="lines",
+                mode=mode,
                 name=name,
                 line=dict(
                     width=line_width,
-                    color=colors.get(key, None)
-                )
+                    color=colors.get(key, "#999999")
+                ),
+                hovertemplate="%{y:.2f}%<extra></extra>"
             )
         )
     
@@ -193,9 +209,14 @@ def plot_seasonality(return_data, title="Gold Seasonality"):
         # Default fallback if no data
         ymin, ymax = -1, 1
         
-    # Update layout
+    # Update layout with clean, simple styling
     fig.update_layout(
-        title=title,
+        title={
+            'text': title,
+            'font': {'size': 20, 'color': '#ffffff'},  # White title for dark mode
+            'x': 0.5,
+            'xanchor': 'center'
+        },
         xaxis_title="",
         yaxis_title="Cumulative Return (%)",
         xaxis=dict(
@@ -203,40 +224,47 @@ def plot_seasonality(return_data, title="Gold Seasonality"):
             tickvals=month_positions,
             ticktext=month_names,
             tickangle=0,
-            gridcolor="rgba(120, 120, 120, 0.2)",
+            gridcolor="rgba(80, 80, 80, 0.3)",  # Darker grid for dark mode
+            tickfont=dict(size=11, color="#ffffff")  # White text
         ),
         yaxis=dict(
             ticksuffix="%",
-            gridcolor="rgba(120, 120, 120, 0.2)",
+            gridcolor="rgba(80, 80, 80, 0.3)",  # Darker grid for dark mode
             zeroline=True,
-            zerolinecolor="rgba(120, 120, 120, 0.4)",
+            zerolinecolor="rgba(150, 150, 150, 0.5)",  # Lighter zero line for dark mode
             zerolinewidth=1,
-            range=[ymin, ymax]  # Set the dynamic range
+            range=[ymin, ymax],  # Set the dynamic range
+            tickfont=dict(size=11, color="#ffffff")  # White text
         ),
         legend=dict(
             orientation="h",
             yanchor="bottom",
             y=1.02,
-            xanchor="right",
-            x=1
+            xanchor="center",
+            x=0.5,
+            font=dict(size=11, color="#ffffff"),  # White text for legend
+            bgcolor="rgba(17, 17, 17, 0.7)"  # Dark background for legend
         ),
-        template="plotly_dark",
+        margin=dict(l=40, r=40, t=60, b=40),
         hovermode="x unified",
-        margin=dict(l=10, r=10, t=80, b=10)
+        plot_bgcolor='rgba(17, 17, 17, 1)',  # Dark background for dark mode
+        paper_bgcolor='rgba(17, 17, 17, 1)', # Dark paper
+        font=dict(family="Arial, sans-serif", color="#ffffff")  # White text for dark mode
     )
     
-    # Add annotations to highlight important periods
-    # Get current y-axis range to position the annotations
-    y_range = ymax - ymin
-    annotation_y = ymax - (y_range * 0.05)  # Position near the top
-    
-    # Add month separators (thin vertical lines)
-    for month_pos in [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]:
-        fig.add_shape(
-            type="line",
-            x0=month_pos, x1=month_pos,
-            y0=ymin, y1=ymax,
-            line=dict(color="rgba(150, 150, 150, 0.3)", width=1, dash="dot")
+    # Add a zero line for reference with better styling
+    fig.add_shape(
+        type="line",
+        x0=0,
+        y0=0,
+        x1=365,
+        y1=0,
+        line=dict(
+            color="rgba(0, 0, 0, 0.5)",
+            width=1.5
         )
+    )
+    
+    # Skip the filled background areas for a cleaner look
     
     return fig

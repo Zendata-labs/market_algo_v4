@@ -247,14 +247,14 @@ PROFILE_MIN_PERIODS = {
 
 # Create a mapping of readable profile names
 PROFILE_DISPLAY_NAMES = {
-    "decennial": "Decennial Cycle",
-    "presidential": "Presidential Cycle",
-    "quarter": "Quarter of Year",
-    "month": "Month of Year",
-    "week_of_year": "Week of Year",
-    "week_of_month": "Week of Month",
-    "day_of_week": "Day of Week",
-    "session": "Trading Session",
+    "decennial": "Decennial Profile",
+    "presidential": "Presidential Profile",
+    "quarter": "Annual Quarter Profile",
+    "month": "Monthly Profile",
+    "week_of_year": "Weekly Profiles (Year)",
+    "week_of_month": "Weekly Profiles (Month)",
+    "day_of_week": "Daily Profiles",
+    "session": "Session Profiles",
 }
 
 # Cache directory setup

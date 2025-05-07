@@ -6,15 +6,24 @@ import datetime as dt
 import pandas as pd
 from . import config
 
-def decennial_date_ui(preset_options, default_preset_index, min_days):
+def decennial_date_ui(preset_options, default_preset_index, min_days, key_prefix=""):
     """
     Specialized UI for decennial profile (10-year periods).
+    
+    Args:
+        preset_options: List of preset options
+        default_preset_index: Default selected index
+        min_days: Minimum number of days required
+        key_prefix: Prefix for widget keys to ensure uniqueness
     """
     # Add a custom option to the presets
     all_options = preset_options + ["Custom Range"]
     
+    # Create unique widget keys
+    preset_key = f"{key_prefix}_decennial_preset_selectbox"
+    
     # Show decade presets as a dropdown
-    preset = st.sidebar.selectbox("10-Year Periods", all_options, default_preset_index)
+    preset = st.sidebar.selectbox("10-Year Periods", all_options, default_preset_index, key=preset_key)
     
     # Default values
     if preset == "Custom Range":
@@ -25,8 +34,13 @@ def decennial_date_ui(preset_options, default_preset_index, min_days):
         # Get date range from the selected preset
         s_def, e_def = config.PROFILE_PRESETS["decennial"][preset]
     
+    # Create unique widget keys
+    custom_range_key = f"{key_prefix}_decennial_custom_range_checkbox"
+    start_year_key = f"{key_prefix}_decennial_start_year_input"
+    end_year_key = f"{key_prefix}_decennial_end_year_input"
+    
     # Show simplified date selection UI for decennial with step=10 years
-    custom_range = st.sidebar.checkbox("Custom Date Range", value=(preset == "Custom Range"))
+    custom_range = st.sidebar.checkbox("Custom Date Range", value=(preset == "Custom Range"), key=custom_range_key)
     
     if custom_range:
         col1, col2 = st.sidebar.columns(2)
@@ -36,12 +50,12 @@ def decennial_date_ui(preset_options, default_preset_index, min_days):
             start_year_default = min(s_def.year, config.complete_year-10)
             start_year = st.number_input("Start Year", min_value=1974, 
                                         max_value=config.complete_year-1, 
-                                        value=start_year_default, step=10)
+                                        value=start_year_default, step=10, key=start_year_key)
         with col2:
             # Make sure end_year doesn't exceed complete_year
             end_year = st.number_input("End Year", min_value=start_year+1, 
                                     max_value=config.complete_year, 
-                                    value=min(e_def.year, config.complete_year), step=10)
+                                    value=min(e_def.year, config.complete_year), step=10, key=end_year_key)
     
         # Create date objects from the selected years (full year ranges)
         start = pd.Timestamp(year=start_year, month=1, day=1).date()
