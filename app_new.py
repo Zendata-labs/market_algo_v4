@@ -48,9 +48,11 @@ def render_sidebar_controls():
     profile_display = st.sidebar.selectbox("Profile", profile_display_names, default_index)
     profile_key = profile_options[profile_display_names.index(profile_display)]
 
-    # Chart type selection for monthly profile
+    # Chart type selection for monthly and daily profiles
     chart_type = "bar"
-    if profile_key == "month":
+    view_type = "standard"
+    
+    if profile_key in ["month", "day_of_week"]:
         st.sidebar.markdown("---")
         chart_type = st.sidebar.radio(
             "Chart Type",
@@ -59,8 +61,8 @@ def render_sidebar_controls():
         )
         chart_type = "bar" if chart_type == "Bar Chart" else "line"
         
-        # Year ranges for line chart
-        if chart_type == "line":
+        # Year ranges for line chart in monthly profile
+        if profile_key == "month" and chart_type == "line":
             st.sidebar.markdown("### Line Chart Options")
             
             # Return calculation method
@@ -88,6 +90,14 @@ def render_sidebar_controls():
                 'show_15yr': show_15yr,
                 'return_method_key': return_method_key
             }
+        # Daily profile specific options    
+        elif profile_key == "day_of_week":
+            st.sidebar.markdown("### View Options")
+            view_options = ["Standard View", "Hour Volatility Clock"]
+            view_selection = st.sidebar.selectbox("Display Type", view_options, index=0)
+            view_type = "volatility_clock" if view_selection == "Hour Volatility Clock" else "standard"
+            
+            year_controls = {}
         else:
             year_controls = {}
     else:
@@ -119,7 +129,8 @@ def render_sidebar_controls():
         'session_view_mode': session_view_mode,
         'session_filter': session_filter,
         'chart_type': chart_type,
-        'year_controls': year_controls
+        'year_controls': year_controls,
+        'view_type': view_type
     }
 
 # Get sidebar controls
@@ -142,7 +153,8 @@ render_cyclical_profiles_tab(
     controls['session_view_mode'], 
     controls['session_filter'],
     chart_type=controls['chart_type'],
-    year_controls=controls['year_controls']
+    year_controls=controls['year_controls'],
+    view_type=controls['view_type']
 )
 render_candle_charts_tab(tab3, load_csv)
 

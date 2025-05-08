@@ -19,7 +19,7 @@ def load_seasonality_data(file_key, load_function):
     df = load_function(file_key)
     return df
 
-def render_cyclical_profiles_tab(tab, df, profile_key, metric, session_view_mode, session_filter, x="Label", chart_type="bar", year_controls=None):
+def render_cyclical_profiles_tab(tab, df, profile_key, metric, session_view_mode, session_filter, x="Label", chart_type="bar", year_controls=None, view_type="standard"):
     """Render the Cyclical Profiles tab content"""
     with tab:
         st.markdown("""
@@ -34,6 +34,25 @@ def render_cyclical_profiles_tab(tab, df, profile_key, metric, session_view_mode
         if profile_key == "month" and chart_type == "line":
             # Render seasonality line chart for monthly profile
             render_monthly_seasonality(year_controls)
+            return  # Exit early to avoid showing other charts
+            
+        # If day_of_week profile with volatility clock view, show the volatility clock
+        if profile_key == "day_of_week" and view_type == "volatility_clock":
+            # Import the volatility clock module
+            from gold.volatility_clock import display_volatility_clock
+            
+            # Pass the exact metric name from the main app to ensure proper synchronization
+            # This is important because the UI shows the selected metric name
+            volatility_metric = metric
+            
+            # Log the metric being passed to the volatility clock
+            print(f"Passing metric: {volatility_metric} to volatility clock")
+            
+            # The volatility_clock module will handle the conversion internally            
+            # This ensures UI consistency between the main app and the volatility clock
+            
+            # Render the volatility clock view with the selected metric
+            display_volatility_clock(default_metric=volatility_metric)
             return  # Exit early to avoid showing other charts
         
         # For all other profiles or month with bar chart, continue with standard view
