@@ -1,2 +1,1 @@
-v4-->https://marketalgov4-gold.streamlit.app/
-v5--> https://marketalgo-goldv5.streamlit.app/
+This is the `Main5` branch of the Gold dashboard, which contains a Volatility clock and a composite average of all profiles.
