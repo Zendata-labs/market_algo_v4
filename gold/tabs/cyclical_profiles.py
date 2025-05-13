@@ -13,17 +13,13 @@ from gold import config
 from gold.date_ui import get_date_range_for_profile
 from gold.data.loader import load_profile_data
 from gold.seasonality import calculate_seasonality, generate_cumulative_returns, plot_seasonality
-from gold.composite_avg import calculate_composite_average, get_composite_periods, get_composite_description
-from gold.profile_utils import create_ordered_profile_df
-# Import after creating the profile_utils to avoid circular imports
-from gold.tabs.composite_view import render_composite_averages
 
 def load_seasonality_data(file_key, load_function):
     """Load data for seasonality analysis with caching"""
     df = load_function(file_key)
     return df
 
-def render_cyclical_profiles_tab(tab, df, profile_key, metric, session_view_mode, session_filter, x="Label", chart_type="bar", year_controls=None, view_type="standard", show_composite=False):
+def render_cyclical_profiles_tab(tab, df, profile_key, metric, session_view_mode, session_filter, x="Label", chart_type="bar", year_controls=None, view_type="standard"):
     """Render the Cyclical Profiles tab content"""
     with tab:
         st.markdown("""
@@ -34,61 +30,10 @@ def render_cyclical_profiles_tab(tab, df, profile_key, metric, session_view_mode
         bars = average down months.
         """, unsafe_allow_html=True)
         
-        # For all profiles, we need to define date ranges first
-        # Set date range based on the selected profile
-        # For composite view, use predefined date ranges
-        # For standard view, get the date range from the UI
-        if show_composite:
-            # If showing composite averages, use today's date and a fixed 20-year history for loading initial data
-            # The actual composite calculations will use appropriate periods defined in composite_avg module
-            end = dt.datetime.now().date()
-            start = end - dt.timedelta(days=365*20)  # 20 years of data should cover all composite periods
-            
-            # Create an info message about date ranges for composite averages
-            st.info("📅 When viewing composite averages, the date range selector is not used. Each composite is calculated using its own predefined period.")
-        else:
-            # For regular view, set date range based on the selected profile
-            # Use a key prefix to avoid duplicate widget IDs
-            key_prefix = f"{profile_key}_{chart_type}"
-            start, end = get_date_range_for_profile(profile_key, key_prefix=key_prefix)
-            
-            # Error handling for invalid dates
-            if start > end:
-                st.error("Start date after End date")
-                return
-                
-        # If chart_type is line, use the new universal line chart for all profiles
-        if chart_type == "line":
-            # Get profile data with date range filtering (if not already provided)
-            if df is None or len(df) == 0:
-                try:
-                    profile_df = load_profile_data(
-                        profile_key, 
-                        start, 
-                        end,
-                        view_mode=session_view_mode,
-                        filter_type=session_filter
-                    )
-                
-                    if profile_df.empty:
-                        st.info("No data in selected date range")
-                        return
-                except Exception as e:
-                    st.error(f"Error loading data: {e}")
-                    return
-            else:
-                profile_df = df  # Use the provided DataFrame
-            
-            # Set the x-axis label column
-            x = "Label" if "Label" in profile_df.columns else "Month"
-            
-            # Display date range information
-            date_format = "%b %d, %Y"
-            date_info = f"Data from {start.strftime(date_format)} to {end.strftime(date_format)}"
-            st.markdown(f"<p style='color: gray;'>{date_info}</p>", unsafe_allow_html=True)
-            
-            # Render the line chart with the selected metric
-            render_line_chart(profile_df, profile_key, metric, x)
+        # If month profile with line chart, just show the seasonality chart
+        if profile_key == "month" and chart_type == "line":
+            # Render seasonality line chart for monthly profile
+            render_monthly_seasonality(year_controls)
             return  # Exit early to avoid showing other charts
             
         # If day_of_week profile with volatility clock view, show the volatility clock
@@ -110,9 +55,21 @@ def render_cyclical_profiles_tab(tab, df, profile_key, metric, session_view_mode
             display_volatility_clock(default_metric=volatility_metric)
             return  # Exit early to avoid showing other charts
         
+        # For all other profiles or month with bar chart, continue with standard view
+        
+        # Set date range based on the selected profile
+        # Use a key prefix to avoid duplicate widget IDs
+        key_prefix = f"{profile_key}_{chart_type}"
+        start, end = get_date_range_for_profile(profile_key, key_prefix=key_prefix)
+        
+        # Error handling for invalid dates
+        if start > end:
+            st.error("Start date after End date")
+            return
+        
         # Use the profile data if already fetched, otherwise load it with date filters
         if df is not None and len(df) > 0:
-            profile_df = df  # Use the provided DataFrame
+            profile_df = df
         else:
             try:
                 # Get profile data with date range filtering
@@ -130,189 +87,9 @@ def render_cyclical_profiles_tab(tab, df, profile_key, metric, session_view_mode
             except Exception as e:
                 st.error(f"Error loading data: {e}")
                 return
-            
-        # Set the x-axis label column based on profile type
-        x = "Label" if "Label" in profile_df.columns else "Month"
         
-        # Add date range information to the top of the page
-        date_format = "%b %d, %Y"
-        date_info = f"Data from {start.strftime(date_format)} to {end.strftime(date_format)}"
-        
-        # Check if we should show the composite averages view
-        if show_composite:
-            # Display date range at the top
-            st.markdown(f"<p style='color: gray;'>{date_info}</p>", unsafe_allow_html=True)
-            
-            # Get all available composite periods for this profile type
-            composite_periods = get_composite_periods(profile_key)
-            composite_options = list(composite_periods.keys())
-            
-            # Create the tables for each composite period
-            st.header(f"Composite Averages: {profile_key.replace('_', ' ').title()}")
-            
-            # Informational box explaining composite averages
-            with st.expander("ℹ️ About Composite Averages", expanded=False):
-                st.markdown("""
-                A **composite average** is the average value of a metric at the same point within a repeating time cycle, 
-                calculated across multiple instances of that cycle.
-                
-                For example, for a monthly profile, the "Short-term Avg" shows the average performance of each month
-                over the past 3 years, while the "Long-term Avg" shows the average over 10 years.
-                
-                This helps identify which patterns are consistent across different timeframes and which might be
-                more recent phenomena.
-                """)
-            
-            # Show each timeframe one after another
-            for period_type in composite_options:
-                description = get_composite_description(profile_key, period_type)
-                
-                # Create a section for this period
-                st.markdown(f"## {period_type}")
-                st.markdown(f"<p style='color: gray; margin-bottom: 20px;'>{description}</p>", unsafe_allow_html=True)
-                
-                # Define metric columns to average
-                metric_columns = ["AvgReturn", "AvgRange", "ProbGreen", "ProbRed"]
-                
-                # Make a copy of the data to avoid modifying the original
-                period_df = profile_df.copy()
-                
-                # Calculate the composite average for this period
-                if period_type != "Min Cycle":  # Min Cycle is the current data, no averaging needed
-                    period_df = calculate_composite_average(period_df, profile_key, period_type, x, metric_columns)
-                
-                # Sort by natural order for the profile type
-                period_df = create_ordered_profile_df(period_df, profile_key, session_view_mode)
-                
-                # Special handling for session profile to match regular session display
-                if profile_key == "session":
-                    # Create a visualization that matches the regular session profile
-                    # Create a vibrant color palette for the three sessions (good for dark mode)
-                    session_colors = {
-                        "Asia": "#FF3333",    # Bright red
-                        "London": "#FFCC00",  # Golden yellow
-                        "NY": "#33CC33"       # Bright green
-                    }
-                    
-                    # Select the y column based on the metric
-                    y_column = "AvgReturn"
-                    y_title = "Average Return"
-                    if metric == "ATR points":
-                        y_column = "AvgRange"
-                        y_title = "ATR (points)"
-                    elif metric == "Probability":
-                        # For probability, we'll create a custom chart later - still use AvgReturn for now
-                        y_column = "AvgReturn"
-                        y_title = "Average Return"
-                    
-                    # Choose the chart based on the session view mode and metric
-                    if metric == "Probability":
-                        # For probability, we need to show both green and red probabilities
-                        if session_view_mode == "daily":  # 5-Bar view
-                            # Group the data by day, showing probability of green/red for each day
-                            probability_df = period_df.groupby("DayLabel")[["ProbGreen", "ProbRed"]].mean().reset_index()
-                            
-                            # Create a grouped bar chart showing probability of green/red for each day
-                            fig = px.bar(probability_df, 
-                                        x="DayLabel", 
-                                        y=["ProbGreen", "ProbRed"], 
-                                        barmode="group",
-                                        color_discrete_map={"ProbGreen":"#33CC33", "ProbRed":"#FF3333"},
-                                        height=500)
-                            
-                            fig.update_layout(
-                                title=f"Probability Analysis by Day - {period_type}",
-                                xaxis_title="Day of Week",
-                                yaxis_title="Probability (%)"
-                            )
-                        else:  # Combined view
-                            # Group by session
-                            probability_df = period_df.groupby("SessionLabel")[["ProbGreen", "ProbRed"]].mean().reset_index()
-                            
-                            # Create a grouped bar chart showing probability of green/red for each session
-                            fig = px.bar(probability_df, 
-                                        x="SessionLabel", 
-                                        y=["ProbGreen", "ProbRed"], 
-                                        barmode="group",
-                                        color_discrete_map={"ProbGreen":"#33CC33", "ProbRed":"#FF3333"},
-                                        height=500)
-                            
-                            fig.update_layout(
-                                title=f"Probability Analysis by Session - {period_type}",
-                                xaxis_title="Trading Session",
-                                yaxis_title="Probability (%)"
-                            )
-                    else:  # For Average Return and ATR points metrics
-                        if session_view_mode == "daily":  # 5-Bar view
-                            # Create a stacked bar chart with one bar per day, colored by session
-                            fig = px.bar(period_df,
-                                        x="DayLabel",
-                                        y=y_column,
-                                        color="SessionLabel",
-                                        color_discrete_map=session_colors,
-                                        barmode="stack",
-                                        height=500)
-                            
-                            # Customize layout
-                            fig.update_layout(
-                                title=f"Daily Performance by Trading Session - {period_type}",
-                                xaxis_title="Day of Week",
-                                yaxis_title=y_title,
-                                legend_title="Trading Session"
-                            )
-                        else:  # Combined view (1 bar with 3 sessions)
-                            # Use a constant value for x-axis to create a single bar
-                            period_df["Segment"] = "Combined Sessions"
-                            
-                            # Create a stacked bar chart
-                            fig = px.bar(period_df,
-                                        x="Segment",
-                                        y=y_column,
-                                        color="SessionLabel",
-                                        color_discrete_map=session_colors,
-                                        barmode="stack",
-                                        height=500)
-                            
-                            # Customize layout
-                            fig.update_layout(
-                                title=f"Trading Sessions Performance - {period_type}",
-                                xaxis_title="",
-                                yaxis_title=y_title,
-                                legend_title="Trading Session"
-                            )
-                else:  # For non-session profiles, use standard display
-                    # Create visualization based on selected metric
-                    if metric == "Average Return":
-                        period_df["col"] = period_df["AvgReturn"].gt(0).map({True:"green", False:"red"})
-                        fig = px.bar(period_df, x=x, y="AvgReturn", color="col",
-                                    color_discrete_map="identity", height=400)
-                        fig.update_layout(yaxis_title="Average Return (%)")
-                    elif metric == "ATR points":
-                        q = period_df["AvgRange"].quantile([0, .33, .66, 1]).values
-                        period_df["band"] = period_df["AvgRange"].apply(
-                            lambda v: "Low" if v<=q[1] else "Avg" if v<=q[2] else "High")
-                        fig = px.bar(period_df, x=x, y="AvgRange", color="band",
-                                    color_discrete_map={"Low":"green","Avg":"orange","High":"red"}, height=400)
-                        fig.update_layout(yaxis_title="ATR (points)")
-                    else:  # Probability
-                        fig = px.bar(period_df, x=x, y=["ProbGreen","ProbRed"], barmode="group",
-                                    color_discrete_map={"ProbGreen":"green","ProbRed":"red"}, height=400)
-                        fig.update_layout(yaxis_title="Probability (%)")
-                
-                # Display the chart with a unique key
-                # Create a unique key based on period type and metric
-                chart_key = f"composite_{profile_key}_{period_type}_{metric}".replace(" ", "_").lower()
-                st.plotly_chart(fig, use_container_width=True, key=chart_key)
-                
-                # Add separator between periods
-                if period_type != composite_options[-1]:
-                    st.markdown("---")
-            
-            return  # Exit early to avoid showing other UI elements
-
-        # Display standard UI for non-composite view
-        # Display the date range information at the top
-        st.markdown(f"<p style='color: gray;'>{date_info}</p>", unsafe_allow_html=True)
+        # Prepare profile data title based on selected date range
+        data_title = st.empty()  # Placeholder for the title
         
         # Format date strings for display
         if start and end:
@@ -323,88 +100,66 @@ def render_cyclical_profiles_tab(tab, df, profile_key, metric, session_view_mode
             elif profile_key in ['day_of_week', 'day_of_month']:
                 # For daily profiles, show month and year only
                 date_range_str = f"{start.strftime('%b %Y')} - {end.strftime('%b %Y')}"
-            elif profile_key in ['month', 'week_of_month', 'quarter']:
-                # For monthly/quarterly profiles, only show years
+            elif profile_key == 'month':
+                # For monthly profile, show years only
                 date_range_str = f"{start.strftime('%Y')} - {end.strftime('%Y')}"
-            elif profile_key in ['week_of_year']:
-                # For yearly profiles, show year (and week number if available)
+            elif profile_key == 'quarter':
+                # For quarterly profile, show years only
                 date_range_str = f"{start.strftime('%Y')} - {end.strftime('%Y')}"
-            elif profile_key in ['presidential', 'decennial']:
-                # For multi-year cycles, just show years
-                date_range_str = f"{start.year} - {end.year}"
             else:
-                # Default format for other profile types
+                # Default format for other profiles
                 date_range_str = f"{start.strftime('%d %b %Y')} - {end.strftime('%d %b %Y')}"
-                
-            # Display the date range in the title                
-            st.markdown(f"### Profile Data: {date_range_str}")
+            
+            # Set the profile data title using the date range
+            data_title.markdown(f"### Profile Data: {date_range_str}")
         
-        # Session profiles get their own visualization logic
+        # Create visualization based on selected metric and profile type
         if profile_key == "session":
-            render_session_profile(profile_df, session_view_mode, session_filter, metric=metric)
-        # Monthly profile with 'line' chart type gets the seasonality view
-        elif profile_key == "month" and chart_type == "line":
-            render_monthly_seasonality(year_controls)
-        # For all other profiles, use the standard visualization
+            render_session_profile(profile_df, session_view_mode, session_filter)
         else:
+            # Standard visualization for other profiles
             render_standard_profile(profile_df, metric, x, profile_key)
 
-def render_session_profile(profile_df, session_view_mode, session_filter, metric="Average Return"):
-    """Render session-specific visualization"""
-    # Get the metric from the sidebar if not provided
-    if metric is None:
-        metric = st.session_state.get('metric', "Average Return")
-    
-    # Select the y column and title based on the metric
-    y_column = "AvgReturn"
-    y_title = "Average Return"
-    if metric == "ATR points":
-        y_column = "AvgRange"
-        y_title = "ATR (points)"
-    
-    # Handle different metrics and view modes
-    if metric == "Probability":
+def create_ordered_profile_df(df, profile_key, session_view_mode):
+    """Create a profile dataframe in the natural order for the profile type"""
+    if profile_key == "month":
+        # For monthly profile, explicitly create a new dataframe in Jan-Dec order
+        month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        profile_df = pd.DataFrame()
+        
+        # Build dataframe in explicit month order
+        for month in month_order:
+            month_data = df[df["Label"] == month]
+            if not month_data.empty:
+                profile_df = pd.concat([profile_df, month_data])
+    elif profile_key == "day_of_week":
+        # For day of week, explicitly order Mon-Fri
+        dow_order = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+        profile_df = pd.DataFrame()
+        
+        for day in dow_order:
+            day_data = df[df["Label"] == day]
+            if not day_data.empty:
+                profile_df = pd.concat([profile_df, day_data])
+    elif profile_key == "session":
+        # For session profile, special handling based on view mode
         if session_view_mode == "daily":
-            # Group the data by day, showing probability of green/red for each day
-            probability_df = profile_df.groupby("DayLabel")[["ProbGreen", "ProbRed"]].mean().reset_index()
-            
-            # Create a grouped bar chart showing probability of green/red for each day
-            fig2 = px.bar(probability_df, 
-                        x="DayLabel", 
-                        y=["ProbGreen", "ProbRed"], 
-                        barmode="group",
-                        color_discrete_map={"ProbGreen":"#33CC33", "ProbRed":"#FF3333"},
-                        height=500)
-            
-            fig2.update_layout(
-                title="Probability Analysis by Day",
-                xaxis_title="Day of Week",
-                yaxis_title="Probability (%)"
-            )
-        else:  # Combined view
-            # Group by session
-            probability_df = profile_df.groupby("SessionLabel")[["ProbGreen", "ProbRed"]].mean().reset_index()
-            
-            # Create a grouped bar chart showing probability of green/red for each session
-            fig2 = px.bar(probability_df, 
-                        x="SessionLabel", 
-                        y=["ProbGreen", "ProbRed"], 
-                        barmode="group",
-                        color_discrete_map={"ProbGreen":"#33CC33", "ProbRed":"#FF3333"},
-                        height=500)
-            
-            # Add title based on filter
-            filter_title = ""
-            if session_filter != "All":
-                filter_title = f" ({session_filter})"
-                
-            fig2.update_layout(
-                title=f"Probability Analysis by Session{filter_title}",
-                xaxis_title="Trading Session",
-                yaxis_title="Probability (%)"
-            )
-    elif session_view_mode == "daily":
+            # Order by weekday, then by session within each day
+            profile_df = df.copy().sort_values(["Bucket", "Session"])
+        else:
+            # For combined view, order by session (Asia, London, NY)
+            profile_df = df.copy().sort_values(["Session"])
+    else:
+        # For other profiles, sort by Bucket which should represent the natural profile order
+        profile_df = df.copy().sort_values("Bucket")
+    
+    return profile_df
+
+def render_session_profile(profile_df, session_view_mode, session_filter):
+    """Render session-specific visualization"""
+    if session_view_mode == "daily":
         # For daily view with 5 bars, each split into 3 sessions as stacked segments
+        # Create a pivot table to get sessions as columns
         if "DayLabel" in profile_df.columns and "SessionLabel" in profile_df.columns:
             # Create a vibrant color palette for the three sessions (good for dark mode)
             session_colors = {
@@ -416,7 +171,7 @@ def render_session_profile(profile_df, session_view_mode, session_filter, metric
             # Create a stacked bar chart with one bar per day, colored by session
             fig2 = px.bar(profile_df,
                         x="DayLabel",
-                        y=y_column,
+                        y="AvgReturn",
                         color="SessionLabel",
                         color_discrete_map=session_colors,
                         barmode="stack",
@@ -424,9 +179,9 @@ def render_session_profile(profile_df, session_view_mode, session_filter, metric
             
             # Customize layout
             fig2.update_layout(
-                title=f"Daily Performance by Trading Session - {y_title}",
+                title="Daily Performance by Trading Session",
                 xaxis_title="Day of Week",
-                yaxis_title=y_title,
+                yaxis_title="Average Return",
                 legend_title="Trading Session"
             )
             
@@ -454,9 +209,9 @@ def render_session_profile(profile_df, session_view_mode, session_filter, metric
                 y_pos -= 0.05
         else:
             # Fallback if the data structure is not as expected
-            fig2 = px.bar(profile_df, x="Label", y=y_column, color="col",
+            fig2 = px.bar(profile_df, x="Label", y="AvgReturn", color="col",
                         color_discrete_map="identity", height=400)
-    else: 
+    else:
         # For combined view (1 bar with 3 sessions)
         # Create a vibrant color palette for the three sessions (good for dark mode)
         session_colors = {
@@ -471,7 +226,7 @@ def render_session_profile(profile_df, session_view_mode, session_filter, metric
         # Create a stacked bar chart
         fig2 = px.bar(profile_df,
                     x="Segment",
-                    y=y_column,
+                    y="AvgReturn",
                     color="SessionLabel",
                     color_discrete_map=session_colors,
                     barmode="stack",
@@ -515,181 +270,6 @@ def render_session_profile(profile_df, session_view_mode, session_filter, metric
     
     fig2.update_layout(xaxis_title="", yaxis_title="")
     st.plotly_chart(fig2, use_container_width=True)
-
-def render_line_chart(profile_df, profile_key, metric, x):
-    """
-    Render a line chart visualization for any profile type.
-    
-    Args:
-        profile_df: DataFrame with profile data
-        profile_key: The profile type (month, day_of_week, etc.)
-        metric: The metric to display (Average Return or ATR points)
-        x: The column to use for the x-axis
-    """
-    # Make sure we have data
-    if profile_df is None or profile_df.empty:
-        st.warning("No data available for the selected profile and date range.")
-        return
-    
-    # Sort by natural order for the profile type
-    ordered_df = create_ordered_profile_df(profile_df, profile_key, "daily")
-    
-    # Create subheader for the chart
-    st.subheader(f"{profile_key.replace('_', ' ').title()} - {metric}")
-    
-    if metric == "Average Return":
-        # For Average Return, use green/red coloring based on positive/negative values
-        y_column = "AvgReturn"
-        y_title = "Average Return (%)"
-        
-        # Create a scatter plot with color based on value
-        ordered_df["color"] = ordered_df["AvgReturn"].apply(lambda x: "green" if x > 0 else "red")
-        
-        # Create a line chart connecting all points
-        fig = px.line(
-            ordered_df, 
-            x=x, 
-            y=y_column,
-            markers=True,  # Add markers for data points
-            color_discrete_sequence=["#1E88E5"]  # Blue line connecting all points
-        )
-        
-        # Add scatter plot with colored markers based on positive/negative values
-        fig.add_trace(
-            go.Scatter(
-                x=ordered_df[x],
-                y=ordered_df[y_column],
-                mode="markers",
-                marker=dict(
-                    size=10,
-                    color=ordered_df["color"].map({"green": "#2e7d32", "red": "#c62828"}),
-                    line=dict(width=2, color="white")
-                ),
-                name="",
-                showlegend=False
-            )
-        )
-        
-        # Add zero reference line
-        fig.add_shape(
-            type="line",
-            x0=0, y0=0, x1=1, y1=0,
-            xref="paper", yref="y",
-            line=dict(color="rgba(0,0,0,0.3)", dash="dash")
-        )
-        
-    else:  # ATR points with continuous line and colored line segments connecting points
-        y_column = "AvgRange"
-        y_title = "ATR (points)"
-        
-        # First ensure all data points are in the correct order
-        ordered_df = ordered_df.sort_values(by=x)  # Sort by x-axis values
-        
-        # Calculate value ranges for ATR banding - use quartiles for better distribution
-        min_val = ordered_df[y_column].min()
-        max_val = ordered_df[y_column].max()
-        
-        # Use quantiles for more accurate thresholds
-        low_threshold = ordered_df[y_column].quantile(0.33)
-        high_threshold = ordered_df[y_column].quantile(0.66)
-        
-        # Create a new clean figure
-        fig = go.Figure()
-        
-        # Get values as lists
-        x_vals = ordered_df[x].tolist()
-        y_vals = ordered_df[y_column].tolist()
-        n_points = len(x_vals)
-        
-        # Create colored segments by drawing a line between consecutive points
-        for i in range(n_points - 1):  # Connect each point to the next one
-            # Determine color based on value
-            curr_val = y_vals[i]
-            if curr_val <= low_threshold:
-                line_color = "#2e7d32"  # Green for low ATR
-                category = "Low"
-            elif curr_val <= high_threshold:
-                line_color = "#ff9800"  # Orange for medium ATR
-                category = "Medium"
-            else:
-                line_color = "#c62828"  # Red for high ATR
-                category = "High"
-                
-            # Create a line segment between this point and the next
-            fig.add_trace(go.Scatter(
-                x=[x_vals[i], x_vals[i+1]],
-                y=[y_vals[i], y_vals[i+1]],
-                mode="lines",
-                line=dict(color=line_color, width=3),
-                showlegend=False,
-                hoverinfo="none"
-            ))
-        
-        # Add markers on top of the line segments
-        for i in range(n_points):
-            # Determine marker color based on value
-            curr_val = y_vals[i]
-            if curr_val <= low_threshold:
-                marker_color = "#2e7d32"  # Green for low
-            elif curr_val <= high_threshold:
-                marker_color = "#ff9800"  # Orange for medium
-            else:
-                marker_color = "#c62828"  # Red for high
-                
-            # Add a marker for this point
-            fig.add_trace(go.Scatter(
-                x=[x_vals[i]],
-                y=[y_vals[i]],
-                mode="markers",
-                marker=dict(
-                    size=10,
-                    color=marker_color,
-                    line=dict(width=1, color="white")
-                ),
-                showlegend=False,
-                hovertemplate="%{x}<br>ATR: %{y:.2f} points<extra></extra>"
-            ))
-            
-        # Add traces for the legend
-        fig.add_trace(go.Scatter(
-            x=[None], y=[None], mode="markers+lines",
-            marker=dict(size=10, color="#2e7d32"),
-            line=dict(color="#2e7d32", width=3),
-            name="Low ATR (≤ {:.1f})".format(low_threshold)
-        ))
-        fig.add_trace(go.Scatter(
-            x=[None], y=[None], mode="markers+lines",
-            marker=dict(size=10, color="#ff9800"),
-            line=dict(color="#ff9800", width=3),
-            name="Medium ATR ({:.1f} - {:.1f})".format(low_threshold, high_threshold)
-        ))
-        fig.add_trace(go.Scatter(
-            x=[None], y=[None], mode="markers+lines",
-            marker=dict(size=10, color="#c62828"),
-            line=dict(color="#c62828", width=3),
-            name="High ATR (≥ {:.1f})".format(high_threshold)
-        ))
-        
-        # Update legend title and placement
-        fig.update_layout(
-            legend_title_text="ATR Levels",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
-        )
-    
-    # Update common layout settings
-    fig.update_layout(
-        title=f"{profile_key.replace('_', ' ').title()} Performance - {metric}",
-        xaxis_title="",
-        yaxis_title=y_title,
-        height=500,
-        hovermode='x unified',
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor='rgba(230, 230, 230, 0.8)'),
-    )
-    
-    # Display the chart
-    st.plotly_chart(fig, use_container_width=True)
-
 
 def render_monthly_seasonality(year_controls=None):
     """Render monthly seasonality line chart (integrated from seasonality tab)"""
@@ -826,7 +406,6 @@ def render_monthly_performance_summary(return_data):
 
 def render_standard_profile(profile_df, metric, x, profile_key):
     """Render standard visualization for non-session profiles"""
-    
     # Original view - sorted by returns (reds/greens grouped together)
     st.subheader("Chart 1 - Grouped by Returns (Red/Green)")
     

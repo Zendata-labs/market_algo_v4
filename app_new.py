@@ -48,41 +48,66 @@ def render_sidebar_controls():
     profile_display = st.sidebar.selectbox("Profile", profile_display_names, default_index)
     profile_key = profile_options[profile_display_names.index(profile_display)]
 
-    # Chart type selection for all profile types
-    st.sidebar.markdown("---")
-    chart_type = st.sidebar.radio(
-        "Chart Type",
-        ["Bar Chart", "Line Chart"],
-        horizontal=True
-    )
-    chart_type = "bar" if chart_type == "Bar Chart" else "line"
-    
+    # Chart type selection for monthly and daily profiles
+    chart_type = "bar"
     view_type = "standard"
-    year_controls = {}
     
-    # Special handling for Day of Week profile with volatility clock option
-    if profile_key == "day_of_week" and chart_type == "bar":  # Only show volatility clock option for bar chart
-        st.sidebar.markdown("### View Options")
-        view_options = ["Standard View", "Hour Volatility Clock"]
-        view_selection = st.sidebar.selectbox("Display Type", view_options, index=0)
-        view_type = "volatility_clock" if view_selection == "Hour Volatility Clock" else "standard"
-
-    # Metrics selection - limit options for line charts
-    metric = "Average Return"
-    
-    if chart_type == "line":
-        # For line charts, only show Average Return and ATR points
-        metric = st.sidebar.radio("Metric", 
-                    ["Average Return", "ATR points"], 0)
+    if profile_key in ["month", "day_of_week"]:
+        st.sidebar.markdown("---")
+        chart_type = st.sidebar.radio(
+            "Chart Type",
+            ["Bar Chart", "Line Chart"],
+            horizontal=True
+        )
+        chart_type = "bar" if chart_type == "Bar Chart" else "line"
+        
+        # Year ranges for line chart in monthly profile
+        if profile_key == "month" and chart_type == "line":
+            st.sidebar.markdown("### Line Chart Options")
+            
+            # Return calculation method
+            st.sidebar.markdown("**Return Calculation:**")
+            return_method = st.sidebar.radio(
+                "Return Method",  # Added a proper label
+                ["Open to Close (Intraday)", "Close to Close (Daily)"],
+                horizontal=True,
+                label_visibility="collapsed"  # Hide the label but maintain accessibility
+            )
+            return_method_key = "open-close" if return_method == "Open to Close (Intraday)" else "close-close"
+            
+            # Year ranges to show
+            st.sidebar.markdown("**Show Year Ranges:**")
+            show_ytd = st.sidebar.checkbox("Year-to-Date", value=False)
+            show_5yr = st.sidebar.checkbox("5-Year Average", value=True)
+            show_10yr = st.sidebar.checkbox("10-Year Average", value=True)
+            show_15yr = st.sidebar.checkbox("15-Year Average", value=True)
+            
+            # Store year selections in control dict
+            year_controls = {
+                'show_ytd': show_ytd,
+                'show_5yr': show_5yr,
+                'show_10yr': show_10yr,
+                'show_15yr': show_15yr,
+                'return_method_key': return_method_key
+            }
+        # Daily profile specific options    
+        elif profile_key == "day_of_week":
+            st.sidebar.markdown("### View Options")
+            view_options = ["Standard View", "Hour Volatility Clock"]
+            view_selection = st.sidebar.selectbox("Display Type", view_options, index=0)
+            view_type = "volatility_clock" if view_selection == "Hour Volatility Clock" else "standard"
+            
+            year_controls = {}
+        else:
+            year_controls = {}
     else:
-        # For bar charts, show all metrics including Probability
+        year_controls = {}
+
+    # Metrics selection (only show for bar charts)
+    metric = "Average Return"
+    if chart_type == "bar":
         metric = st.sidebar.radio("Metric", 
                     ["Average Return", "ATR points", "Probability"], 0)
-    
-    # Add composite average toggle
-    st.sidebar.markdown("""<hr style='margin: 15px 0px; border: none; height: 1px; background-color: #333;'>""", unsafe_allow_html=True)
-    st.sidebar.markdown("### View Options")
-    show_composite = st.sidebar.checkbox("Show Composite Averages", value=False, help="Display historical averages across multiple time periods")
 
     # Session profile specific options
     session_view_mode = "daily"
@@ -100,13 +125,12 @@ def render_sidebar_controls():
 
     return {
         'profile_key': profile_key,
-        'chart_type': chart_type,
         'metric': metric,
         'session_view_mode': session_view_mode,
         'session_filter': session_filter,
+        'chart_type': chart_type,
         'year_controls': year_controls,
-        'view_type': view_type,
-        'show_composite': show_composite
+        'view_type': view_type
     }
 
 # Get sidebar controls
@@ -130,8 +154,7 @@ render_cyclical_profiles_tab(
     controls['session_filter'],
     chart_type=controls['chart_type'],
     year_controls=controls['year_controls'],
-    view_type=controls['view_type'],
-    show_composite=controls['show_composite']
+    view_type=controls['view_type']
 )
 render_candle_charts_tab(tab3, load_csv)
 
