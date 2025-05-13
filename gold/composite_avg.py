@@ -9,60 +9,60 @@ import datetime as dt
 # Define the composite average periods for each profile type
 COMPOSITE_PERIODS = {
     "decennial": {
-        "Min Cycle": 10,           # 10 years (Decade Cycle)
-        "Short-term Avg": 20,      # 20 years (2 cycles)
-        "Mid-term Avg": 30,        # 30 years (3 cycles)
-        "Long-term Avg": 50,       # 50 years (5 cycles)
-        "Multi-year Avg": 100      # 100+ years
+        "10 Years": 10,           # 10 years (Decade Cycle)
+        "20 Years": 20,          # 20 years (2 cycles)
+        "30 Years": 30,          # 30 years (3 cycles)
+        "50 Years": 50,          # 50 years (5 cycles)
+        "100 Years": 100         # 100+ years
     },
     "presidential": {
-        "Min Cycle": 4,            # 4 years (1 full presidential cycle)
-        "Short-term Avg": 8,       # 8 years (2 cycles)
-        "Mid-term Avg": 12,        # 12 years (3 cycles)
-        "Long-term Avg": 20,       # 20 years (5 cycles)
-        "Multi-year Avg": 40       # 40+ years
+        "4 Years": 4,            # 4 years (1 full presidential cycle)
+        "8 Years": 8,            # 8 years (2 cycles)
+        "12 Years": 12,          # 12 years (3 cycles)
+        "20 Years": 20,          # 20 years (5 cycles)
+        "40 Years": 40           # 40+ years
     },
     "quarter": {
-        "Min Cycle": 1,            # 1 year (4 quarters)
-        "Short-term Avg": 3,       # 3 years (12 quarters)
-        "Mid-term Avg": 5,         # 5 years (20 quarters)
-        "Long-term Avg": 10,       # 10 years (40 quarters)
-        "Multi-year Avg": 20       # 20+ years
+        "1 Year": 1,             # 1 year (4 quarters)
+        "3 Years": 3,            # 3 years (12 quarters)
+        "5 Years": 5,            # 5 years (20 quarters)
+        "10 Years": 10,          # 10 years (40 quarters)
+        "20 Years": 20           # 20+ years
     },
     "month": {
-        "Min Cycle": 1,            # 1 year
-        "Short-term Avg": 3,       # 3 years
-        "Mid-term Avg": 5,         # 5 years
-        "Long-term Avg": 10,       # 10 years
-        "Multi-year Avg": 15       # 15+ years
+        "1 Year": 1,             # 1 year (12 months)
+        "3 Years": 3,            # 3 years (36 months)
+        "5 Years": 5,            # 5 years (60 months)
+        "10 Years": 10,          # 10 years (120 months)
+        "15 Years": 15           # 15+ years (180+ months)
     },
     "week_of_year": {
-        "Min Cycle": 1,            # 1 year (52 weeks)
-        "Short-term Avg": 3,       # 3 years (156 weeks)
-        "Mid-term Avg": 5,         # 5 years (260 weeks)
-        "Long-term Avg": 10,       # 10 years (520 weeks)
-        "Multi-year Avg": 20       # 20+ years
+        "1 Year": 1,             # 1 year (52 weeks)
+        "3 Years": 3,            # 3 years (156 weeks)
+        "5 Years": 5,            # 5 years (260 weeks)
+        "10 Years": 10,          # 10 years (520 weeks)
+        "20 Years": 20           # 20+ years (1040+ weeks)
     },
     "week_of_month": {
-        "Min Cycle": 1,            # 1 month
-        "Short-term Avg": 3,       # 1 quarter (3m)
-        "Mid-term Avg": 6,         # 6 months
-        "Long-term Avg": 12,       # 1 year (12m)
-        "Multi-year Avg": 36       # 3-5 years
+        "1 Month": 1,            # 1 month (4-5 weeks)
+        "3 Months": 3,           # 1 quarter (3 months)
+        "6 Months": 6,           # Half year (6 months)
+        "12 Months": 12,         # 1 year (12 months)
+        "36 Months": 36          # 3 years (36 months)
     },
     "day_of_week": {
-        "Min Cycle": 1,            # 1 week
-        "Short-term Avg": 4,       # 1 month (4w)
-        "Mid-term Avg": 13,        # 1 quarter (13w)
-        "Long-term Avg": 52,       # 1 year (52w)
-        "Multi-year Avg": 156      # 3+ years
+        "1 Week": 1,             # 1 week (7 days)
+        "4 Weeks": 4,            # 1 month (4 weeks)
+        "12 Weeks": 12,          # 1 quarter (12 weeks)
+        "52 Weeks": 52,          # 1 year (52 weeks)
+        "156 Weeks": 156         # 3 years (156 weeks)
     },
     "session": {
-        "Min Cycle": 1,            # 1 day
-        "Short-term Avg": 5,       # 1 week (5d)
-        "Mid-term Avg": 20,        # 1 month (20d)
-        "Long-term Avg": 60,       # 3 months (60d)
-        "Multi-year Avg": 250      # 1 year (250d)
+        "1 Week": 1,             # 1 week (5 trading days)
+        "4 Weeks": 4,            # 1 month (4 weeks)
+        "12 Weeks": 12,          # 1 quarter (12 weeks)
+        "52 Weeks": 52,          # 1 year (52 weeks)
+        "156 Weeks": 156         # 3 years (156 weeks)
     }
 }
 
@@ -121,10 +121,10 @@ def get_composite_description(profile_key, composite_type):
     
     Args:
         profile_key: The profile type (month, day_of_week, etc.)
-        composite_type: The composite average type (Min Cycle, Short-term Avg, etc.)
+        composite_type: The composite average type (now using numerical format like "1 Year", "3 Years", etc.)
         
     Returns:
-        String description of the composite average
+        String description of the composite average with additional context
     """
     periods = get_composite_periods(profile_key)
     
@@ -134,46 +134,45 @@ def get_composite_description(profile_key, composite_type):
     # Get the number of periods
     n_periods = periods[composite_type]
     
-    # Create description based on profile type
+    # The composite_type itself now contains the primary period info (e.g., "10 Years")
+    # But we'll add additional context for clarity
+    
+    # Create description based on profile type to provide additional context
     if profile_key == "decennial":
-        return f"{composite_type}: {n_periods} years"
+        cycles = n_periods // 10
+        return f"{composite_type} ({cycles} decade cycles)"
     elif profile_key == "presidential":
         cycles = n_periods // 4
-        return f"{composite_type}: {n_periods} years ({cycles} presidential cycles)"
+        return f"{composite_type} ({cycles} presidential cycles)"
     elif profile_key == "quarter":
-        years = n_periods
-        return f"{composite_type}: {n_periods} years ({years * 4} quarters)"
+        quarters = n_periods * 4
+        return f"{composite_type} ({quarters} quarters)"
     elif profile_key == "month":
-        return f"{composite_type}: {n_periods} years ({n_periods * 12} months)"
+        months = n_periods * 12
+        return f"{composite_type} ({months} months)"
     elif profile_key == "week_of_year":
-        return f"{composite_type}: {n_periods} years ({n_periods * 52} weeks)"
+        weeks = n_periods * 52
+        return f"{composite_type} ({weeks} weeks)"
     elif profile_key == "week_of_month":
-        if n_periods < 12:
-            return f"{composite_type}: {n_periods} months"
+        # For week_of_month, the periods are already in months
+        if "Month" in composite_type:
+            return composite_type  # Already clear enough
         else:
-            years = n_periods // 12
-            months = n_periods % 12
-            if months == 0:
-                return f"{composite_type}: {years} years"
-            else:
-                return f"{composite_type}: {years} years and {months} months"
+            # This would be a case like "3 Years" which is clear enough
+            return composite_type
     elif profile_key == "day_of_week":
-        if n_periods < 52:
-            return f"{composite_type}: {n_periods} weeks"
+        # For day_of_week, the periods are already in weeks
+        if "Week" in composite_type:
+            return composite_type  # Already clear enough
         else:
-            years = n_periods // 52
-            weeks = n_periods % 52
-            if weeks == 0:
-                return f"{composite_type}: {years} years"
-            else:
-                return f"{composite_type}: {years} years and {weeks} weeks"
+            # This would be a case like "1 Year" which is 52 weeks
+            return composite_type
     elif profile_key == "session":
-        if n_periods < 20:
-            return f"{composite_type}: {n_periods} trading days"
-        elif n_periods < 60:
-            return f"{composite_type}: {n_periods} trading days (~{n_periods//20} months)"
+        # For session, the periods are already in weeks
+        if "Week" in composite_type:
+            trading_days = n_periods * 5
+            return f"{composite_type} ({trading_days} trading days)"
         else:
-            return f"{composite_type}: {n_periods} trading days (~{n_periods//250} years)"
-    
-    # Default description
-    return f"{composite_type}: {n_periods} periods"
+            return composite_type
+    else:
+        return composite_type  # Default to just showing the composite type itself

@@ -98,8 +98,10 @@ def render_composite_averages(profile_df, profile_key, metric, x_column, start_d
             margin=dict(l=0, r=0, t=0, b=0),
         )
         
-        # Display the chart
-        st.plotly_chart(fig, use_container_width=True)
+        # Display the chart with a unique key
+        # Create a unique key based on period type and metric
+        chart_key = f"composite_view_{profile_key}_{period_type}_{metric}".replace(" ", "_").lower()
+        st.plotly_chart(fig, use_container_width=True, key=chart_key)
         
         # Add separator between periods
         if period_type != list(periods.keys())[-1]:

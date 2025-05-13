@@ -17,6 +17,12 @@ from gold.composite_avg import calculate_composite_average, get_composite_period
 from gold.profile_utils import create_ordered_profile_df
 # Import after creating the profile_utils to avoid circular imports
 from gold.tabs.composite_view import render_composite_averages
+# Import the new combined composite chart functions
+from gold.tabs.cyclical_profiles_combined import (
+    render_combined_composite_chart,
+    render_combined_probability_bars,
+    render_combined_probability_lines
+)
 
 def load_seasonality_data(file_key, load_function):
     """Load data for seasonality analysis with caching"""
@@ -163,14 +169,32 @@ def render_cyclical_profiles_tab(tab, df, profile_key, metric, session_view_mode
                 more recent phenomena.
                 """)
             
-            # Show each timeframe one after another
-            for period_type in composite_options:
+            # Add toggle for chart type (bar or line)
+            chart_type_options = ["Bar Chart", "Line Chart"]
+            composite_chart_type = st.radio("Chart Type", chart_type_options, horizontal=True)
+            
+            # Add checkboxes for selecting which cycles to display
+            st.markdown("### Select Cycles to Display")
+            
+            # Create columns for better layout of checkboxes
+            checkbox_cols = st.columns(len(composite_options))
+            selected_cycles = {}
+            
+            # Create a checkbox for each cycle
+            for i, period_type in enumerate(composite_options):
                 description = get_composite_description(profile_key, period_type)
-                
-                # Create a section for this period
-                st.markdown(f"## {period_type}")
-                st.markdown(f"<p style='color: gray; margin-bottom: 20px;'>{description}</p>", unsafe_allow_html=True)
-                
+                with checkbox_cols[i]:
+                    selected_cycles[period_type] = st.checkbox(f"{period_type}", value=True, help=description)
+            
+            # Create a consolidated dataframe with data from all selected cycles
+            consolidated_data = {}
+            cycle_dfs = {}
+            
+            # Process each cycle's data
+            for period_type in composite_options:
+                if not selected_cycles[period_type]:
+                    continue  # Skip cycles that aren't selected
+                    
                 # Define metric columns to average
                 metric_columns = ["AvgReturn", "AvgRange", "ProbGreen", "ProbRed"]
                 
@@ -178,135 +202,152 @@ def render_cyclical_profiles_tab(tab, df, profile_key, metric, session_view_mode
                 period_df = profile_df.copy()
                 
                 # Calculate the composite average for this period
-                if period_type != "Min Cycle":  # Min Cycle is the current data, no averaging needed
+                if period_type != composite_options[0]:  # First option is usually current data
                     period_df = calculate_composite_average(period_df, profile_key, period_type, x, metric_columns)
                 
                 # Sort by natural order for the profile type
                 period_df = create_ordered_profile_df(period_df, profile_key, session_view_mode)
                 
-                # Special handling for session profile to match regular session display
-                if profile_key == "session":
-                    # Create a visualization that matches the regular session profile
-                    # Create a vibrant color palette for the three sessions (good for dark mode)
-                    session_colors = {
-                        "Asia": "#FF3333",    # Bright red
-                        "London": "#FFCC00",  # Golden yellow
-                        "NY": "#33CC33"       # Bright green
-                    }
-                    
-                    # Select the y column based on the metric
-                    y_column = "AvgReturn"
-                    y_title = "Average Return"
-                    if metric == "ATR points":
-                        y_column = "AvgRange"
-                        y_title = "ATR (points)"
-                    elif metric == "Probability":
-                        # For probability, we'll create a custom chart later - still use AvgReturn for now
-                        y_column = "AvgReturn"
-                        y_title = "Average Return"
-                    
-                    # Choose the chart based on the session view mode and metric
-                    if metric == "Probability":
-                        # For probability, we need to show both green and red probabilities
-                        if session_view_mode == "daily":  # 5-Bar view
-                            # Group the data by day, showing probability of green/red for each day
-                            probability_df = period_df.groupby("DayLabel")[["ProbGreen", "ProbRed"]].mean().reset_index()
-                            
-                            # Create a grouped bar chart showing probability of green/red for each day
-                            fig = px.bar(probability_df, 
-                                        x="DayLabel", 
-                                        y=["ProbGreen", "ProbRed"], 
-                                        barmode="group",
-                                        color_discrete_map={"ProbGreen":"#33CC33", "ProbRed":"#FF3333"},
-                                        height=500)
-                            
-                            fig.update_layout(
-                                title=f"Probability Analysis by Day - {period_type}",
-                                xaxis_title="Day of Week",
-                                yaxis_title="Probability (%)"
-                            )
-                        else:  # Combined view
-                            # Group by session
-                            probability_df = period_df.groupby("SessionLabel")[["ProbGreen", "ProbRed"]].mean().reset_index()
-                            
-                            # Create a grouped bar chart showing probability of green/red for each session
-                            fig = px.bar(probability_df, 
-                                        x="SessionLabel", 
-                                        y=["ProbGreen", "ProbRed"], 
-                                        barmode="group",
-                                        color_discrete_map={"ProbGreen":"#33CC33", "ProbRed":"#FF3333"},
-                                        height=500)
-                            
-                            fig.update_layout(
-                                title=f"Probability Analysis by Session - {period_type}",
-                                xaxis_title="Trading Session",
-                                yaxis_title="Probability (%)"
-                            )
-                    else:  # For Average Return and ATR points metrics
-                        if session_view_mode == "daily":  # 5-Bar view
-                            # Create a stacked bar chart with one bar per day, colored by session
-                            fig = px.bar(period_df,
-                                        x="DayLabel",
-                                        y=y_column,
-                                        color="SessionLabel",
-                                        color_discrete_map=session_colors,
-                                        barmode="stack",
-                                        height=500)
-                            
-                            # Customize layout
-                            fig.update_layout(
-                                title=f"Daily Performance by Trading Session - {period_type}",
-                                xaxis_title="Day of Week",
-                                yaxis_title=y_title,
-                                legend_title="Trading Session"
-                            )
-                        else:  # Combined view (1 bar with 3 sessions)
-                            # Use a constant value for x-axis to create a single bar
-                            period_df["Segment"] = "Combined Sessions"
-                            
-                            # Create a stacked bar chart
-                            fig = px.bar(period_df,
-                                        x="Segment",
-                                        y=y_column,
-                                        color="SessionLabel",
-                                        color_discrete_map=session_colors,
-                                        barmode="stack",
-                                        height=500)
-                            
-                            # Customize layout
-                            fig.update_layout(
-                                title=f"Trading Sessions Performance - {period_type}",
-                                xaxis_title="",
-                                yaxis_title=y_title,
-                                legend_title="Trading Session"
-                            )
-                else:  # For non-session profiles, use standard display
-                    # Create visualization based on selected metric
-                    if metric == "Average Return":
-                        period_df["col"] = period_df["AvgReturn"].gt(0).map({True:"green", False:"red"})
-                        fig = px.bar(period_df, x=x, y="AvgReturn", color="col",
-                                    color_discrete_map="identity", height=400)
-                        fig.update_layout(yaxis_title="Average Return (%)")
-                    elif metric == "ATR points":
-                        q = period_df["AvgRange"].quantile([0, .33, .66, 1]).values
-                        period_df["band"] = period_df["AvgRange"].apply(
-                            lambda v: "Low" if v<=q[1] else "Avg" if v<=q[2] else "High")
-                        fig = px.bar(period_df, x=x, y="AvgRange", color="band",
-                                    color_discrete_map={"Low":"green","Avg":"orange","High":"red"}, height=400)
-                        fig.update_layout(yaxis_title="ATR (points)")
-                    else:  # Probability
-                        fig = px.bar(period_df, x=x, y=["ProbGreen","ProbRed"], barmode="group",
-                                    color_discrete_map={"ProbGreen":"green","ProbRed":"red"}, height=400)
-                        fig.update_layout(yaxis_title="Probability (%)")
+                # Store this dataframe for the visualization
+                cycle_dfs[period_type] = period_df
+            
+            # Now render the combined visualization
+            render_combined_composite_chart(
+                cycle_dfs, 
+                profile_key, 
+                metric, 
+                x, 
+                composite_chart_type.lower().split()[0],  # Extract 'bar' or 'line'
+                session_view_mode if profile_key == "session" else None,
+                session_filter if profile_key == "session" else None
+            )
+            
+            # Return early to avoid showing the individual charts
+            return
                 
-                # Display the chart with a unique key
-                # Create a unique key based on period type and metric
-                chart_key = f"composite_{profile_key}_{period_type}_{metric}".replace(" ", "_").lower()
-                st.plotly_chart(fig, use_container_width=True, key=chart_key)
-                
-                # Add separator between periods
-                if period_type != composite_options[-1]:
-                    st.markdown("---")
+        # Special handling for session profile to match regular session display
+        if profile_key == "session":
+            # Create a visualization that matches the regular session profile
+            # Create a vibrant color palette for the three sessions (good for dark mode)
+            session_colors = {
+                "Asia": "#FF3333",    # Bright red
+                "London": "#FFCC00",  # Golden yellow
+                "NY": "#33CC33"       # Bright green
+            }
+            
+            # Select the y column based on the metric
+            y_column = "AvgReturn"
+            y_title = "Average Return"
+            if metric == "ATR points":
+                y_column = "AvgRange"
+                y_title = "ATR (points)"
+            elif metric == "Probability":
+                # For probability, we'll create a custom chart later - still use AvgReturn for now
+                y_column = "AvgReturn"
+                y_title = "Average Return"
+            
+            # Choose the chart based on the session view mode and metric
+            if metric == "Probability":
+                # For probability, we need to show both green and red probabilities
+                if session_view_mode == "daily":  # 5-Bar view
+                    # Group the data by day, showing probability of green/red for each day
+                    probability_df = period_df.groupby("DayLabel")[["ProbGreen", "ProbRed"]].mean().reset_index()
+                    
+                    # Create a grouped bar chart showing probability of green/red for each day
+                    fig = px.bar(probability_df, 
+                                x="DayLabel", 
+                                y=["ProbGreen", "ProbRed"], 
+                                barmode="group",
+                                color_discrete_map={"ProbGreen":"#33CC33", "ProbRed":"#FF3333"},
+                                height=500)
+                    
+                    fig.update_layout(
+                        title=f"Probability Analysis by Day - {period_type}",
+                        xaxis_title="Day of Week",
+                        yaxis_title="Probability (%)"
+                    )
+                else:  # Combined view
+                    # Group by session
+                    probability_df = period_df.groupby("SessionLabel")[["ProbGreen", "ProbRed"]].mean().reset_index()
+                    
+                    # Create a grouped bar chart showing probability of green/red for each session
+                    fig = px.bar(probability_df, 
+                                x="SessionLabel", 
+                                y=["ProbGreen", "ProbRed"], 
+                                barmode="group",
+                                color_discrete_map={"ProbGreen":"#33CC33", "ProbRed":"#FF3333"},
+                                height=500)
+                    
+                    fig.update_layout(
+                        title=f"Probability Analysis by Session - {period_type}",
+                        xaxis_title="Trading Session",
+                        yaxis_title="Probability (%)"
+                    )
+            else:  # For Average Return and ATR points metrics
+                if session_view_mode == "daily":  # 5-Bar view
+                    # Create a stacked bar chart with one bar per day, colored by session
+                    fig = px.bar(period_df,
+                                x="DayLabel",
+                                y=y_column,
+                                color="SessionLabel",
+                                color_discrete_map=session_colors,
+                                barmode="stack",
+                                height=500)
+                    
+                    # Customize layout
+                    fig.update_layout(
+                        title=f"Daily Performance by Trading Session - {period_type}",
+                        xaxis_title="Day of Week",
+                        yaxis_title=y_title,
+                        legend_title="Trading Session"
+                    )
+                else:  # Combined view (1 bar with 3 sessions)
+                    # Use a constant value for x-axis to create a single bar
+                    period_df["Segment"] = "Combined Sessions"
+                    
+                    # Create a stacked bar chart
+                    fig = px.bar(period_df,
+                                x="Segment",
+                                y=y_column,
+                                color="SessionLabel",
+                                color_discrete_map=session_colors,
+                                barmode="stack",
+                                height=500)
+                    
+                    # Customize layout
+                    fig.update_layout(
+                        title=f"Trading Sessions Performance - {period_type}",
+                        xaxis_title="",
+                        yaxis_title=y_title,
+                        legend_title="Trading Session"
+                    )
+            else:  # For non-session profiles, use standard display
+                # Create visualization based on selected metric
+                if metric == "Average Return":
+                    period_df["col"] = period_df["AvgReturn"].gt(0).map({True:"green", False:"red"})
+                    fig = px.bar(period_df, x=x, y="AvgReturn", color="col",
+                                color_discrete_map="identity", height=400)
+                    fig.update_layout(yaxis_title="Average Return (%)")
+                elif metric == "ATR points":
+                    q = period_df["AvgRange"].quantile([0, .33, .66, 1]).values
+                    period_df["band"] = period_df["AvgRange"].apply(
+                        lambda v: "Low" if v<=q[1] else "Avg" if v<=q[2] else "High")
+                    fig = px.bar(period_df, x=x, y="AvgRange", color="band",
+                                color_discrete_map={"Low":"green","Avg":"orange","High":"red"}, height=400)
+                    fig.update_layout(yaxis_title="ATR (points)")
+                else:  # Probability
+                    fig = px.bar(period_df, x=x, y=["ProbGreen","ProbRed"], barmode="group",
+                                color_discrete_map={"ProbGreen":"green","ProbRed":"red"}, height=400)
+                    fig.update_layout(yaxis_title="Probability (%)")
+            
+            # Display the chart with a unique key
+            # Create a unique key based on period type and metric
+            chart_key = f"composite_{profile_key}_{period_type}_{metric}".replace(" ", "_").lower()
+            st.plotly_chart(fig, use_container_width=True, key=chart_key)
+            
+            # Add separator between periods
+            if period_type != composite_options[-1]:
+                st.markdown("---")
             
             return  # Exit early to avoid showing other UI elements
 
