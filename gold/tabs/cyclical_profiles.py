@@ -508,13 +508,13 @@ def render_composite_averages(profile_df, profile_key, metric, chart_type, compo
                                      (" %" if metric == "Average Return" else " points") + "<extra></extra>"
                     ))
     else:  # chart_type == "line"
-        # Enhanced line styles with smooth curves, all solid lines with varying widths
+        # Line styles with dots to show patterns more clearly
         line_styles = {
-            "min_cycle": {"width": 5},      # Blue - thickest
-            "short_term": {"width": 4.5},   # Orange
-            "mid_term": {"width": 4},      # Violet
-            "long_term": {"width": 3.5},   # Green
-            "multi_year": {"width": 3}     # Red - thinnest
+            "min_cycle": {"width": 3},      # Blue 
+            "short_term": {"width": 3},     # Orange
+            "mid_term": {"width": 3},      # Violet
+            "long_term": {"width": 3},     # Green
+            "multi_year": {"width": 3}     # Red
         }
         
         # For line chart, add smooth curves with enhanced styling
@@ -550,14 +550,19 @@ def render_composite_averages(profile_df, profile_key, metric, chart_type, compo
                 fig.add_trace(go.Scatter(
                     x=composite_df["DisplayText"],
                     y=composite_df[avg_key],
-                    mode="lines",  # No markers, just smooth lines
+                    mode="lines+markers",  # Add markers to show data points
                     name=display_name,
                     line=dict(
                         color=line_color, 
                         width=line_style["width"],
-                        shape="spline",  # Smooth curves
-                        smoothing=1.3,   # Extra smoothing
+                        shape="linear",  # Linear connects dots directly - no smoothing
                         dash="solid"     # Always solid lines
+                    ),
+                    marker=dict(
+                        size=10,      # Larger dots for better visibility
+                        symbol="circle",
+                        color=line_color,
+                        line=dict(width=1.5, color="#FFFFFF")  # Thicker white border around markers
                     ),
                     hovertemplate="<b>%{x}</b><br>" + display_name + ": %{y:.2f}" + 
                                  (" %" if metric == "Average Return" else " points") + "<extra></extra>"
@@ -616,6 +621,38 @@ def render_composite_averages(profile_df, profile_key, metric, chart_type, compo
         "ATR points": "Average True Range (Points)",
         "Probability": "Probability (%)"
     }
+    
+    # Determine y-axis settings based on metric
+    # For Average Return, we need to allow negative values
+    # For other metrics (ATR, Probability), we start from zero
+    if metric == "Average Return":
+        y_axis_config = dict(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor="rgba(255,255,255,0.1)",  # Subtle white grid
+            tickfont=dict(size=13, color="#E0E0E0"),  # Light gray ticks
+            ticklen=8,
+            tickwidth=2,
+            tickcolor="#E0E0E0",  # Light gray tick marks
+            zerolinecolor="rgba(255,255,255,0.5)",  # Light gray zero line
+            zerolinewidth=2
+        )
+    else:  # ATR points and Probability should start from zero
+        y_axis_config = dict(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor="rgba(255,255,255,0.1)",  # Subtle white grid
+            tickfont=dict(size=13, color="#E0E0E0"),  # Light gray ticks
+            ticklen=8,
+            tickwidth=2,
+            tickcolor="#E0E0E0",  # Light gray tick marks
+            zerolinecolor="rgba(255,255,255,0.5)",  # Light gray zero line
+            zerolinewidth=2,
+            rangemode="tozero",  # Force y-axis to start from zero
+            autorange=False,  # Don't auto-adjust range
+            range=[0, None]   # Start from zero, auto-calculate upper limit
+        )
+    
     fig.update_layout(
         height=500,  # Taller chart for better visibility
         margin=dict(l=50, r=50, t=50, b=60),  # More margin space
@@ -647,17 +684,8 @@ def render_composite_averages(profile_df, profile_key, metric, chart_type, compo
             tickwidth=2,
             tickcolor="#E0E0E0"  # Light gray tick marks
         ),
-        yaxis=dict(
-            showgrid=True,
-            gridwidth=1,
-            gridcolor="rgba(255,255,255,0.1)",  # Subtle white grid
-            tickfont=dict(size=13, color="#E0E0E0"),  # Light gray ticks
-            ticklen=8,
-            tickwidth=2,
-            tickcolor="#E0E0E0",  # Light gray tick marks
-            zerolinecolor="rgba(255,255,255,0.5)",  # Light gray zero line
-            zerolinewidth=2
-        )
+        # Apply the y-axis configuration based on the metric type
+        yaxis=y_axis_config
     )
     
     # Add zero line for better reference (particularly important for Average Return)
@@ -1154,19 +1182,24 @@ def render_standard_profile(profile_df, metric, x, profile_key, chart_type="bar"
             if current_color is not None:
                 segments.append((segment_start, len(profile_df)-1, current_color))
             
-            # Add each colored segment as a separate smooth spline
+            # Add each colored segment as a line with dots
             for start, end, color in segments:
                 segment_df = profile_df.iloc[start:end+1]
                 if len(segment_df) > 1:  # Need at least 2 points for a line
                     fig2.add_trace(go.Scatter(
                         x=segment_df[x],
                         y=segment_df["AvgReturn"],
-                        mode="lines",
+                        mode="lines+markers",  # Add markers for each data point
                         line=dict(
                             color=color_map[color],
-                            width=5,       # Thicker line
-                            shape="spline", # Smooth curve
-                            smoothing=1.3   # Extra smoothing
+                            width=3,        # Medium line width
+                            shape="linear"   # Direct line between points
+                        ),
+                        marker=dict(
+                            size=10,         # Larger dots for visibility
+                            symbol="circle",
+                            color=color_map[color],
+                            line=dict(width=1.5, color="#FFFFFF")  # White border around markers
                         ),
                         name="Positive Returns" if color == "positive" else "Negative Returns",
                         hovertemplate="<b>%{x}</b><br>Return: %{y:.2f}%<extra></extra>"
@@ -1234,12 +1267,17 @@ def render_standard_profile(profile_df, metric, x, profile_key, chart_type="bar"
             fig2.add_trace(go.Scatter(
                 x=profile_df[x],
                 y=profile_df["AvgRange"],
-                mode="lines",
+                mode="lines+markers",  # Add markers to show data points
                 line=dict(
-                    color="#2196F3",  # Vibrant blue
-                    width=5,         # Thicker line
-                    shape="spline",   # Smooth curve
-                    smoothing=1.3    # Extra smoothing
+                    color="#64B5F6",  # Brighter blue for dark mode
+                    width=3,         # Medium line width
+                    shape="linear"    # Linear connections between points
+                ),
+                marker=dict(
+                    size=10,          # Larger dots for better visibility
+                    symbol="circle",
+                    color="#64B5F6",  # Match the line color
+                    line=dict(width=1.5, color="#FFFFFF")  # White border around markers
                 ),
                 fill="tozeroy",     # Fill area under the line
                 fillcolor="rgba(33, 150, 243, 0.2)",  # Brighter blue fill for dark mode
